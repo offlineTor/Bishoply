@@ -1,5 +1,41 @@
 # Bishoply production deployment
 
+## Render Docker staging/production
+
+Create a Render **Web Service** using the repository root as the Docker build
+context and the root `Dockerfile`. Use the Virginia region. Render supplies
+`PORT`; the image starts with:
+
+```text
+uvicorn auth_server:app --host 0.0.0.0 --port ${PORT:-10000}
+```
+
+The image installs Debian's Stockfish package and sets
+`STOCKFISH_PATH=/usr/games/stockfish`. The application also accepts an explicit
+`STOCKFISH_PATH` override, but no macOS path is used in the container.
+
+Set these Render environment variables through Render's secret configuration,
+never in the repository:
+
+```text
+BISHOPLY_ENV=production
+DATABASE_URL=postgresql://...
+REDIS_URL=redis://...
+BISHOPLY_ALLOWED_ORIGINS=https://staging.example.com
+BISHOPLY_FRONTEND_ORIGIN=https://staging.example.com
+BISHOPLY_READINESS_TOKEN=<generated-secret>
+DISCORD_CLIENT_ID=<staging-application-id>
+DISCORD_CLIENT_SECRET=<staging-client-secret>
+BISHOPLY_MULTI_INSTANCE=true
+```
+
+Deploy only the backend image to Render. Host `frontend/dist` separately on a
+stable HTTPS static host with `VITE_API_BASE_URL` set to the Render HTTPS API
+URL. Configure the Discord Activity URL mapping to that frontend origin.
+Render health checks should target `/health`; use `/ready` with the readiness
+header for provider-side database checks. Do not use a quick Cloudflare tunnel
+as a production endpoint.
+
 ## Current architecture audit
 
 The backend keeps one service API for both SQLite and PostgreSQL. Development
