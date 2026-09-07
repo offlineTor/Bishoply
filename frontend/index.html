@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+  <title>Bishoply</title>
+  <link
+    rel="stylesheet"
+    href="/style.css"
+  />
+</head>
+<body>
+  <div id="app-splash" class="app-splash" aria-live="polite">
+    <div class="app-splash-mark">♝</div>
+    <strong>Bishoply</strong>
+    <div class="app-splash-dots" aria-hidden="true"><span>·</span><span>·</span><span>·</span></div>
+  </div>
+  <main class="shell">
+    <aside class="sidebar">
+      <div class="brand-block">
+        <div class="brand-mark">♝</div>
+        <div>
+          <h1>Bishoply</h1>
+          <p>Play differently.</p>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <button class="nav-item active" data-page="home" type="button">
+          <span>⌂</span>
+          <strong>Home</strong>
+        </button>
+
+        <button class="nav-item" data-page="play" type="button">
+          <span>♟</span>
+          <strong>Play</strong>
+        </button>
+
+        <button class="nav-item" data-page="game" type="button">
+          <span>♙</span>
+          <strong>Current Game</strong>
+        </button>
+
+        <button class="nav-item" data-page="practice" type="button">
+          <span>◇</span>
+          <strong>Practice</strong>
+        </button>
+
+        <div class="nav-label">You</div>
+
+        <button class="nav-item" data-page="profile" type="button">
+          <span>○</span>
+          <strong>Profile</strong>
+        </button>
+
+        <button class="nav-item" data-page="history" type="button">
+          <span>↻</span>
+          <strong>History</strong>
+        </button>
+
+        <button class="nav-item" data-page="leaderboard" type="button">
+          <span>♛</span>
+          <strong>Leaderboard</strong>
+        </button>
+
+        <div class="nav-label">Bishoply</div>
+
+        <button class="nav-item" data-page="shop" type="button">
+          <span>✦</span>
+          <strong>Shop</strong>
+        </button>
+      </nav>
+
+      <div id="sidebar-profile" class="sidebar-profile">
+        Loading profile...
+      </div>
+    </aside>
+
+    <section class="main">
+      <header class="topbar">
+        <div>
+          <div id="connection-label" class="eyebrow">Connecting</div>
+          <div id="status" class="status-line">Starting Bishoply...</div>
+        </div>
+
+        <div class="connection-pills">
+          <span id="sdk-check">SDK waiting</span>
+          <span id="api-check">API waiting</span>
+          <span id="profile-check">Profile waiting</span>
+        </div>
+      </header>
+
+      <section id="page-home" class="page active">
+        <div class="hero">
+          <div class="hero-copy">
+            <div class="eyebrow gold">Bishoply Chess Platform</div>
+            <h2>Premium chess, built inside Discord.</h2>
+            <p>
+              Create games, challenge friends, track progress, and explore upcoming practice, leaderboard, and shop features.
+            </p>
+
+            <div class="hero-actions">
+              <button class="gold-button" data-page-shortcut="play" type="button">
+                Start Duel
+              </button>
+              <button class="dark-button" data-page-shortcut="profile" type="button">
+                View Profile
+              </button>
+            </div>
+          </div>
+
+          <div class="home-board-card">
+            <div class="lux-board-preview">
+              <div>♜</div><div>♞</div><div>♝</div><div>♛</div>
+              <div>♟</div><div>♟</div><div>♟</div><div>♟</div>
+              <div></div><div></div><div>♙</div><div></div>
+              <div>♖</div><div>♘</div><div>♗</div><div>♕</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="stat-grid">
+          <article class="stat-card">
+            <span>Rating</span>
+            <strong id="home-rating">1200</strong>
+            <p id="home-rank">Bronze I</p>
+          </article>
+
+          <article class="stat-card">
+            <span>Games</span>
+            <strong id="home-games">0</strong>
+            <p>Saved history</p>
+          </article>
+
+          <article class="stat-card">
+            <span>Win Rate</span>
+            <strong id="home-win-rate">0%</strong>
+            <p>Profile record</p>
+          </article>
+        </div>
+
+        <div class="quick-grid">
+          <button class="feature-card" data-page-shortcut="play" type="button">
+            <span>♟</span>
+            <strong>Create Duel</strong>
+            <p>Start a casual game and share the Game ID.</p>
+          </button>
+
+          <button class="feature-card" data-page-shortcut="history" type="button">
+            <span>↻</span>
+            <strong>Game History</strong>
+            <p>Review saved games and continue active ones.</p>
+          </button>
+
+          <button class="feature-card locked" data-page-shortcut="shop" type="button">
+            <span>✦</span>
+            <strong>Shop</strong>
+            <p>Cosmetics coming later: boards, pieces, and more.</p>
+          </button>
+        </div>
+      </section>
+
+      <section id="page-play" class="page">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow gold">Duel Setup</div>
+            <h2>Play</h2>
+            <p>Keep this page simple: create a match or join a match. The chess board lives on the Current Game page.</p>
+          </div>
+        </div>
+
+        <div class="duel-grid">
+          <article class="glass-panel duel-card">
+            <div class="duel-icon">♟</div>
+            <h3>Find a Duel</h3>
+            <p>Join the rated queue and be matched with another Bishoply player.</p>
+            <div id="matchmaking-status" class="game-status" aria-live="polite"></div>
+            <button id="create-game-button" class="gold-button full" type="button">
+              Find Opponent
+            </button>
+            <button id="cancel-matchmaking-button" class="dark-button full" type="button" hidden>Cancel</button>
+          </article>
+
+          <article class="glass-panel duel-card">
+            <div class="duel-icon">♞</div>
+            <h3>Join Duel</h3>
+            <p>Paste a Game ID from another player and join their match.</p>
+
+            <div class="input-stack">
+              <input
+                id="join-game-input"
+                type="text"
+                placeholder="Paste Game ID"
+                autocomplete="off"
+              />
+              <button id="join-game-button" class="gold-button full" type="button">
+                Join Game
+              </button>
+            </div>
+          </article>
+
+          <article class="glass-panel duel-card">
+            <div class="duel-icon">♙</div>
+            <h3>Current Match</h3>
+            <p>Once a game is created or joined, jump into the board screen.</p>
+            <button class="dark-button full" data-page-shortcut="game" type="button">
+              Open Current Game
+            </button>
+          </article>
+        </div>
+      </section>
+
+      <section id="page-game" class="page">
+        <div class="game-page-layout">
+          <section class="game-main">
+            <div class="game-header">
+              <div>
+                <div id="match-mode-label" class="eyebrow gold">Live Match</div>
+                <h2>Current Game</h2>
+              </div>
+
+              <button id="chess-sound-button" class="dark-button" type="button" aria-pressed="true">Sound on</button>
+            </div>
+
+            <div id="player-top" class="match-player"></div>
+            <div class="board-stage">
+              <div id="board" class="board"></div>
+            </div>
+            <div id="player-bottom" class="match-player"></div>
+          </section>
+
+          <aside class="game-side">
+            <section class="glass-panel">
+              <h3>Match</h3>
+              <div id="game-info" class="game-info">
+                No active game loaded.
+              </div>
+            </section>
+
+            <section class="glass-panel">
+              <h3>Move</h3>
+              <p class="small-copy">Use UCI format for now. Example: e2e4.</p>
+
+              <div class="input-stack">
+                <input
+                  id="move-input"
+                  type="text"
+                  placeholder="Move: e2e4"
+                  autocomplete="off"
+                />
+                <button id="move-button" class="gold-button full" type="button">
+                  Submit Move
+                </button>
+              </div>
+            </section>
+
+            <section class="glass-panel">
+              <h3>Move history</h3>
+              <div id="moves-list" class="moves-list">
+                No moves yet.
+              </div>
+            </section>
+          </aside>
+          <section id="game-review" class="game-review" hidden></section>
+        </div>
+      </section>
+
+      <section id="page-profile" class="page">
+        <div class="page-heading">
+          <div>
+            <div class="eyebrow gold">Your Identity</div>
+            <h2>Profile</h2>
+            <p>Your Bishoply account, rating, record, level, and progress.</p>
+          </div>
+        </div>
+
+        <div id="profile-page-card" class="profile-page-card">
+          Profile loading...
+        </div>
+      </section>
+
+      <section id="page-history" class="page">
+        <div class="page-heading split">
+          <div>
+            <div class="eyebrow gold">Saved Games</div>
+            <h2>History</h2>
+            <p>Clean list of your latest games. Click one to open it on the Current Game page.</p>
+          </div>
+
+          <button id="refresh-history-button" class="dark-button" type="button">
+            Refresh
+          </button>
+        </div>
+
+        <div id="history-list" class="history-list">
+          No history loaded yet.
+        </div>
+      </section>
+
+      <section id="page-practice" class="page">
+        <div class="page-heading practice-heading">
+          <div>
+            <div class="eyebrow gold">Practice</div>
+            <h2>Training room</h2>
+            <p>Choose a Bishoply bot, train in an unrated game, and get live move feedback only in Practice.</p>
+          </div>
+
+          <div class="practice-page-actions">
+            <span class="practice-chip">Practice / Unrated</span>
+          </div>
+        </div>
+
+        <section id="practice-landing" class="practice-landing">
+          <div class="practice-landing-copy">
+            <span class="eyebrow gold">Bishoply bots</span>
+            <h3>Pick a training partner</h3>
+            <p>Each bot uses controlled weakening and style preferences. Strength is an estimate, not verified Elo.</p>
+
+            <form id="practice-create-form" class="practice-create-form">
+              <label>
+                <span>Play as</span>
+                <div class="practice-toggle" role="tablist" aria-label="Practice color">
+                  <button class="practice-toggle-button active" type="button" data-practice-color="white">White</button>
+                  <button class="practice-toggle-button" type="button" data-practice-color="black">Black</button>
+                </div>
+              </label>
+
+              <p id="practice-status-line" class="practice-status-line">Select a bot to start.</p>
+            </form>
+          </div>
+
+          <div id="practice-bots" class="practice-bot-grid">
+            Loading bots...
+          </div>
+        </section>
+
+        <section id="practice-loading" class="practice-loading" hidden aria-live="polite">
+          <div class="practice-loading-mark">♝</div>
+          <span class="eyebrow gold">Practice / Unrated</span>
+          <h3 id="practice-loading-bot">Preparing your opponent</h3>
+          <strong id="practice-loading-strength"></strong>
+          <p id="practice-loading-copy">Preparing the board…</p>
+          <div class="practice-loading-dots" aria-hidden="true"><span>•</span><span>•</span><span>•</span></div>
+        </section>
+
+        <section id="practice-session" class="practice-session" hidden>
+          <div class="game-page-layout practice-page-layout">
+            <section class="game-main">
+              <div class="game-header">
+                <div>
+                  <div id="practice-mode-label" class="eyebrow gold">Practice / Unrated</div>
+                  <h2>Practice Game</h2>
+                </div>
+
+              </div>
+
+              <div id="practice-player-top" class="match-player"></div>
+              <div id="practice-player-bottom" class="match-player"></div>
+
+              <div id="practice-feedback" class="practice-feedback" aria-live="polite"></div>
+
+              <div class="board-stage practice-board-stage">
+                <div id="practice-eval-bar" class="practice-eval-bar">
+                  <div class="practice-eval-labels">
+                    <span>W</span>
+                    <strong id="practice-eval-value">—</strong>
+                    <span>B</span>
+                  </div>
+                  <div class="practice-eval-track">
+                    <div id="practice-eval-fill"></div>
+                  </div>
+                </div>
+
+                <div id="practice-board" class="board"></div>
+              </div>
+
+              <div id="practice-candidates" class="practice-candidates" hidden></div>
+
+              <div class="practice-controls" aria-label="Practice controls">
+                <button id="practice-hint-button" class="gold-button" type="button">Hint</button>
+                <button id="practice-sound-button" class="dark-button" type="button" aria-pressed="true">Sound</button>
+                <button id="practice-undo-button" class="dark-button" type="button" disabled>Undo</button>
+                <button id="practice-eval-toggle" class="dark-button" type="button" aria-pressed="true">Eval</button>
+                <button id="practice-emma-voice-button" class="dark-button" type="button" aria-pressed="false">Emma Voice: Off</button>
+                <button id="practice-resign-button" class="resign-button" type="button">Resign</button>
+                <button id="practice-restart-button" class="dark-button" type="button">Restart</button>
+                <button id="practice-new-opponent-button" class="dark-button" type="button">New Opponent</button>
+              </div>
+            </section>
+
+            <aside class="game-side practice-side">
+              <section class="glass-panel">
+                <h3>Practice match</h3>
+                <div id="practice-info" class="game-info">Choose a bot to begin.</div>
+              </section>
+
+              <section class="glass-panel">
+                <h3>Controls</h3>
+                <div class="practice-controls-placeholder">Controls are beside the board.</div>
+                <details class="practice-premium-coach">
+                  <summary><span>EMMA+</span><strong>Advanced Coaching</strong><em>Premium</em></summary>
+                  <p>Best move guidance, position explanations, threat detection, and deeper Emma analysis.</p>
+                </details>
+                <p class="small-copy">Hints, live evaluation, and after-move feedback are Practice only.</p>
+              </section>
+
+              <section class="glass-panel">
+                <h3>Move history</h3>
+                <div id="practice-moves" class="moves-list">No Practice game loaded.</div>
+              </section>
+
+              <section class="glass-panel">
+                <h3>Analysis</h3>
+                <div id="practice-analysis-card" class="practice-analysis-card">
+                  Analysis will appear after your move.
+                </div>
+              </section>
+            </aside>
+
+            <section id="practice-review" class="game-review" hidden></section>
+          </div>
+        </div>
+      </section>
+
+      <section id="page-leaderboard" class="page">
+        <div class="page-heading split">
+          <div><div class="eyebrow gold">Competitive standings</div><h2>Leaderboard</h2><p>Authoritative Bishoply Chess Rating and SR rankings.</p></div>
+          <div class="segmented"><button id="leaderboard-rating-tab" class="gold-button" type="button">Chess Rating</button><button id="leaderboard-sr-tab" class="dark-button" type="button">SR</button></div>
+        </div>
+        <div id="leaderboard-list" class="history-list">Loading leaderboard…</div>
+      </section>
+
+      <section id="page-shop" class="page">
+        <div class="locked-page">
+          <div class="eyebrow gold">Shop</div>
+          <h2>Cosmetics shop coming later.</h2>
+          <p>Boards, pieces, frames, badges, themes, and effects will go here.</p>
+        </div>
+      </section>
+
+    </section>
+  </main>
+
+  <dialog id="game-result-dialog" aria-labelledby="result-title" aria-describedby="result-reason"></dialog>
+
+  <script
+    type="module"
+    src="/main.js"
+  ></script>
+</body>
+</html>

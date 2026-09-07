@@ -1,0 +1,94 @@
+"""Practice routes never accept arbitrary FENs or mutate multiplayer games."""
+from typing import Literal
+from fastapi import APIRouter, Header, Query, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict, Field
+from backend.practice import config, service
+from backend.analysis.service import get_review
+from backend.practice.auth import discord_identity
+
+router = APIRouter(prefix='/api/practice', tags=['unrated practice'])
+
+
+class Request(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+
+
+class CreateRequest(Request):
+    discord_id: int = Field(gt=0)
+    bot_id: str = Field(min_length=1,max_length=32)
+    player_color: Literal['white','black'] = 'white'
+
+
+class PositionRequest(Request):
+    expected_ply: int = Field(ge=0,le=config.MAX_HISTORY_PLIES)
+
+
+class MoveRequest(PositionRequest):
+    move: str = Field(pattern=r'^[a-h][1-8][a-h][1-8][qrbn]?$')
+
+
+class HintRequest(PositionRequest):
+    stage: int = Field(ge=1,le=3)
+
+
+@router.get('/bots')
+async def list_bots():
+    return {'strength_label':config.LABEL,'calibration_version':config.VERSION,
+            'bots':[bot.public() for bot in config.ROSTER]}
+
+
+@router.post('/games',status_code=201)
+async def create_game(payload: CreateRequest, owner_id: int = Depends(discord_identity)):
+    if payload.discord_id != owner_id:
+        raise HTTPException(403,'Discord identity does not match the requested player')
+    return await service.create(payload.discord_id,payload.bot_id,payload.player_color)
+
+
+@router.get('/games/{game_id}')
+async def read_game(game_id: str, x_practice_key: str = Header(...)):
+    return await service.get(game_id,x_practice_key)
+
+
+@router.post('/games/{game_id}/move')
+async def player_move(game_id: str, payload: MoveRequest, x_practice_key: str = Header(...)):
+    return await service.player_move(game_id,x_practice_key,payload.move,payload.expected_ply)
+
+
+@router.post('/games/{game_id}/bot-move')
+async def bot_move(game_id: str, payload: PositionRequest, x_practice_key: str = Header(...)):
+    return await service.bot_response(game_id,x_practice_key,payload.expected_ply)
+
+
+@router.post('/games/{game_id}/hint')
+async def hint(game_id: str, payload: HintRequest, x_practice_key: str = Header(...)):
+    return await service.hint(game_id,x_practice_key,payload.expected_ply,payload.stage)
+
+
+@router.post('/games/{game_id}/resign')
+async def resign(game_id: str, x_practice_key: str = Header(...)):
+    return await service.resign(game_id,x_practice_key)
+
+
+@router.post('/games/{game_id}/undo')
+async def undo(game_id: str, x_practice_key: str = Header(...)):
+    return await service.undo(game_id, x_practice_key)
+
+
+@router.get('/games/{game_id}/analysis/{ply}')
+async def read_feedback(game_id: str, ply: int, x_practice_key: str = Header(...)):
+    return await get_review(game_id,kind='feedback',ply=ply,key=x_practice_key)
+
+
+@router.post('/games/{game_id}/analysis/{ply}')
+async def request_feedback(game_id: str, ply: int, x_practice_key: str = Header(...)):
+    return await get_review(game_id,True,kind='feedback',ply=ply,key=x_practice_key)
+
+
+@router.get('/games/{game_id}/review')
+async def read_review(game_id: str, x_practice_key: str = Header(...)):
+    return await get_review(game_id,kind='practice',key=x_practice_key)
+
+
+@router.post('/games/{game_id}/review')
+async def request_review(game_id: str, new_revision: bool = Query(False), x_practice_key: str = Header(...)):
+    return await get_review(game_id,True,kind='practice',key=x_practice_key,new_revision=new_revision)

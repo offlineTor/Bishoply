@@ -1,0 +1,207 @@
+{
+  "recorded_at": "2026-09-07T06:54:32.948606+00:00",
+  "reviews": [
+    {
+      "game": "fools_mate",
+      "plies": 4,
+      "baseline_authoritative_total_seconds": 227.3449878749998,
+      "baseline_authoritative_average_seconds_per_ply": 56.83624696874995,
+      "first_fast_ply_seconds": 0.6530380410004,
+      "fast_pass_seconds": 2.131798082999012,
+      "fast_average_seconds_per_ply": 0.532949520749753,
+      "progressive_total_seconds": 229.77015766600016,
+      "authoritative_stage_seconds": 227.63835958300115,
+      "verified_plies": 4,
+      "same_final_labels": true,
+      "engine": "Stockfish 19",
+      "settings": {
+        "fast_depth": 12,
+        "normal_depth": 20,
+        "verify_depth": 24,
+        "discovery_multipv": 4,
+        "verification_multipv": 6,
+        "candidate_multipv": 1,
+        "threads": 1,
+        "hash_mb": 64,
+        "time_limit": 45,
+        "node_limit": null
+      },
+      "updates": [
+        {
+          "stage": "fast_analysis",
+          "plies": 0,
+          "seconds": 0.262
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 1,
+          "seconds": 0.653
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 2,
+          "seconds": 1.211
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 3,
+          "seconds": 1.969
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 4,
+          "seconds": 2.132
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 0,
+          "seconds": 2.132
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 1,
+          "seconds": 41.808
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 2,
+          "seconds": 99.948
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 3,
+          "seconds": 169.554
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 4,
+          "seconds": 229.765
+        }
+      ]
+    },
+    {
+      "game": "opening",
+      "plies": 6,
+      "baseline_authoritative_total_seconds": 231.123157,
+      "baseline_authoritative_average_seconds_per_ply": 38.52052616666666,
+      "first_fast_ply_seconds": 0.5791776669993851,
+      "fast_pass_seconds": 3.3773880829994596,
+      "fast_average_seconds_per_ply": 0.5628980138332432,
+      "progressive_total_seconds": 236.6617224999991,
+      "authoritative_stage_seconds": 233.28433441699963,
+      "verified_plies": 5,
+      "same_final_labels": true,
+      "engine": "Stockfish 19",
+      "settings": {
+        "fast_depth": 12,
+        "normal_depth": 20,
+        "verify_depth": 24,
+        "discovery_multipv": 4,
+        "verification_multipv": 6,
+        "candidate_multipv": 1,
+        "threads": 1,
+        "hash_mb": 64,
+        "time_limit": 45,
+        "node_limit": null
+      },
+      "updates": [
+        {
+          "stage": "fast_analysis",
+          "plies": 0,
+          "seconds": 0.234
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 1,
+          "seconds": 0.579
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 2,
+          "seconds": 1.041
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 3,
+          "seconds": 1.643
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 4,
+          "seconds": 2.147
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 5,
+          "seconds": 2.856
+        },
+        {
+          "stage": "fast_analysis",
+          "plies": 6,
+          "seconds": 3.377
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 0,
+          "seconds": 3.377
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 1,
+          "seconds": 38.22
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 2,
+          "seconds": 88.541
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 3,
+          "seconds": 131.494
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 4,
+          "seconds": 188.642
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 5,
+          "seconds": 228.976
+        },
+        {
+          "stage": "deep_analysis",
+          "plies": 6,
+          "seconds": 236.656
+        }
+      ]
+    }
+  ],
+  "profile": {
+    "startup_seconds": 0.6715222080001695,
+    "clear_hash_plus_ping_seconds": 0.005094391700004053,
+    "timings": [
+      {
+        "move": "e2e4",
+        "depth": 12,
+        "seconds": 0.354244625001229
+      },
+      {
+        "move": "e2e4",
+        "depth": 20,
+        "seconds": 8.637735374999465
+      },
+      {
+        "move": "e7e5",
+        "depth": 12,
+        "seconds": 0.47799920800025575
+      },
+      {
+        "move": "e7e5",
+        "depth": 20,
+        "seconds": 10.543748874999437
+      }
+    ]
+  }
+}

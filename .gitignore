@@ -1,0 +1,42 @@
+.env
+.env.*
+!.env.example
+*.db
+*.db-*
+logs/
+pids/
+*.pem
+*.key
+*.crt
+frontend/dist/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Node
+frontend/node_modules/
+node_modules/
+
+# Local runtime / temp
+*.log
+*.pid
+*.sock
+tmp/
+temp/
+
+# Local SQLite / backups
+*.sqlite
+*.sqlite3
+*.bak
+*.backup
+
+# Local tunnel / deployment temp
+.cloudflared/
+*.tunnel
