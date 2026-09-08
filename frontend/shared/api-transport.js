@@ -7,6 +7,10 @@ export class ApiTransport {
   setToken(token) { this.token = token; }
   url(path) {
     const normalized = path.startsWith("/") ? path : `/${path}`;
+    if (/^https?:\/\//i.test(path)) {
+      if (this.proxy) throw new Error("Discord API transport rejects absolute backend URLs");
+      return path;
+    }
     if (!this.proxy) return `${this.base}${normalized}`;
     return normalized === "/health" || normalized === "/api/health" ? "/api/health" : `/api${normalized}`;
   }
@@ -16,6 +20,6 @@ export class ApiTransport {
 
 export function createApiTransport() {
   return isDiscordRuntime
-    ? new ApiTransport({ proxy: true })
+    ? new ApiTransport({ proxy: true, base: import.meta.env?.VITE_API_PROXY_BASE || "/api" })
     : new ApiTransport({ base: import.meta.env?.VITE_API_BASE_URL || "" });
 }

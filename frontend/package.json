@@ -4,7 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
-    "build": "vite build"
+    "build": "vite build",
+    "build:web": "vite build --mode production",
+    "build:discord": "vite build --mode discord"
   },
   "dependencies": {
     "@discord/embedded-app-sdk": "latest"

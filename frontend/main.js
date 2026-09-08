@@ -15,10 +15,12 @@ const CLIENT_ID = "1546225609967935620";
 const isDiscordActivity = isDiscordRuntime;
 let discordSdk = null;
 
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "").replace(/\/$/, "");
 const apiTransport = createApiTransport();
 
 function backendRequestUrl(path) {
+  if (/^https?:\/\//i.test(path) && isDiscordActivity) {
+    throw new Error("Discord API requests must use the Activity proxy");
+  }
   if (/^https?:\/\//i.test(path)) return path;
   const normalized = path.startsWith("/") ? path : `/${path}`;
   // Discord's Activity mapping uses /api as a proxy prefix and strips it
