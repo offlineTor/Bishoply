@@ -108,6 +108,7 @@ let leaderboardKind = "rating";
 
 
 let currentProfile = null;
+let profileCosmetics = { owned: [], loadout: {} };
 let discordAccessToken = null;
 let webSessionAuthenticated = false;
 let currentGame = null;
@@ -1176,7 +1177,13 @@ function renderProfile(profile) {
           ${formatNumber(profile.rating)}
         </span>
       </div>
+
+      <section class="profile-customization" aria-label="Customization">
+        <div class="eyebrow gold">Customization</div>
+        <div id="profile-cosmetics-grid" class="profile-cosmetics-grid"><span>Loading customization…</span></div>
+      </section>
     `;
+    renderCosmetics();
   }
 
   if (profilePageCard) {
@@ -1332,6 +1339,43 @@ function renderProfile(profile) {
     homeWinRate.textContent =
       `${profile.win_rate}%`;
   }
+}
+
+async function loadProfileCosmetics() {
+  if (!currentProfile) return;
+  try {
+    profileCosmetics = await apiFetch('/api/profile/cosmetics');
+  } catch { profileCosmetics = { owned: [], loadout: {} }; }
+  renderCosmetics();
+}
+
+function renderCosmetics() {
+  const target = document.querySelector('#profile-cosmetics-grid');
+  if (!target) return;
+  const categories = { board_skin: 'Board', piece_set: 'Pieces', board_border: 'Border', profile_frame: 'Profile Frame', background_effect: 'Background Effect', sound_pack: 'Sound Pack' };
+  const owned = profileCosmetics.owned || [];
+  target.innerHTML = Object.entries(categories).map(([category, label]) => {
+    const items = owned.filter(item => item.category === category);
+    return `<div class="cosmetic-slot"><strong>${label}</strong><span>${items.length ? items.map(item => escapeHtml(item.name)).join(', ') : 'Locked'}</span></div>`;
+  }).join('');
+}
+
+function showUsernameOnboarding() {
+  if (!webAuthScreen) return;
+  webAuthScreen.hidden = false;
+  const card = webAuthScreen.querySelector('.web-auth-card');
+  if (!card) return;
+  card.innerHTML = `<div class="brand-mark">♝</div><h2>Choose your Bishoply username</h2><p>This name identifies you across Bishoply.</p><form id="username-onboarding-form"><input name="username" minlength="3" maxlength="20" pattern="[A-Za-z0-9_]{3,20}" required placeholder="Your username" autocomplete="off"><button class="gold-button full" type="submit">Continue</button></form><button class="dark-button full" id="username-signout" type="button">Sign out</button><small id="username-onboarding-status"></small>`;
+  card.querySelector('form').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const status = card.querySelector('#username-onboarding-status');
+    try {
+      const value = new FormData(event.currentTarget).get('username');
+      currentProfile = await apiFetch('/api/profile/username', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username: value }) });
+      webAuthScreen.hidden = true; renderProfile(currentProfile); setStatus('Bishoply is ready.');
+    } catch (error) { status.textContent = error?.message || 'Username is unavailable.'; }
+  });
+  card.querySelector('#username-signout').addEventListener('click', () => accountLogoutButton?.click());
 }
 
 
@@ -3710,18 +3754,19 @@ async function refreshProfile() {
   }
 
   currentProfile =
-    await apiFetch(
-      `/api/profile/${currentProfile.discord_id}`
-    );
+    await apiFetch(currentProfile.discord_id
+      ? `/api/profile/${currentProfile.discord_id}`
+      : "/api/profile");
 
   renderProfile(
     currentProfile
   );
   await loadAccountConnections();
+  await loadProfileCosmetics();
 }
 
 async function loadAccountConnections() {
-  if (!accountConnections || !webSessionAuthenticated) return;
+  if (!accountConnections || !currentProfile) return;
   try {
     const data = await apiFetch("/api/auth/connections");
     const connected = new Set((data.connections || []).map((item) => item.provider));
@@ -4499,7 +4544,7 @@ async function setupBishoply() {
       }
       webSessionAuthenticated = Boolean(session?.authenticated);
       currentProfile = session?.profile || null;
-      appReady = Boolean(currentProfile);
+      appReady = Boolean(currentProfile && currentProfile.username_selected !== false);
       setControlsEnabled(appReady);
       setConnectionLabel("Connected");
       setStatus(appReady ? "Bishoply is ready." : "Signed out");
@@ -4508,6 +4553,10 @@ async function setupBishoply() {
       if (appReady) {
         renderProfile(currentProfile);
         await loadAccountConnections();
+        await loadProfileCosmetics();
+      } else if (webSessionAuthenticated && currentProfile) {
+        renderProfile(currentProfile);
+        showUsernameOnboarding();
       }
       if (sidebarProfile && !appReady) sidebarProfile.textContent = "Sign in to view your profile";
       if (appSplash) {
@@ -4597,6 +4646,7 @@ async function setupBishoply() {
     renderProfile(
       currentProfile
     );
+    await loadProfileCosmetics();
 
     setControlsEnabled(true);
 

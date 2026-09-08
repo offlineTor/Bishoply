@@ -1,7 +1,7 @@
 import json
 import os
 import hmac
-from fastapi import APIRouter, Request, Response, Query, HTTPException
+from fastapi import APIRouter, Request, Response, Query, HTTPException, Header
 from backend import accounts
 from backend.services.profile_service import get_profile_by_discord_id
 from backend.database import db
@@ -45,10 +45,10 @@ async def current_session(request: Request):
         if not row:
             return {"authenticated": True, "user_id": user_id, "profile": None}
         if row["discord_id"] is None:
-            user = await (await connection.execute("SELECT username,display_name,avatar_url,created_at FROM users WHERE id=?", (user_id,))).fetchone()
+            user = await (await connection.execute("SELECT username,display_name,avatar_url,created_at,username_selected_at FROM users WHERE id=?", (user_id,))).fetchone()
             rating = await (await connection.execute("SELECT rating,wins,losses,draws,rated_games FROM skill_ratings WHERE user_id=? AND pool='standard'", (user_id,))).fetchone()
             progression = await (await connection.execute("SELECT sr FROM progression WHERE user_id=?", (user_id,))).fetchone()
-            profile = {"username": user["username"], "display_name": user["display_name"], "avatar_url": user["avatar_url"], "discord_id": None,
+            profile = {"user_id": user_id, "username": user["username"], "username_selected": bool(user["username_selected_at"]), "display_name": user["display_name"], "avatar_url": user["avatar_url"], "discord_id": None,
                        "rating": round(float(rating["rating"])) if rating else 1200, "sr": int(progression["sr"]) if progression else 2500,
                        "wins": int(rating["wins"]) if rating else 0, "losses": int(rating["losses"]) if rating else 0,
                        "draws": int(rating["draws"]) if rating else 0, "games_played": int(rating["rated_games"]) if rating else 0,
@@ -75,8 +75,18 @@ async def logout(request: Request, response: Response):
     return {"authenticated": False}
 
 @router.get("/connections")
-async def connections(request: Request):
-    user_id = await accounts.session_user(request)
+async def connections(request: Request, authorization: str | None = Header(None)):
+    if authorization and authorization.lower().startswith("bearer "):
+        from backend.practice.auth import discord_identity
+        discord_id = await discord_identity(authorization)
+        row = await accounts.db.connect()
+        try:
+            user = await (await row.execute("SELECT id FROM users WHERE discord_id=?", (discord_id,))).fetchone()
+        finally: await row.close()
+        if not user: raise HTTPException(404, "Bishoply profile not found")
+        user_id = user["id"]
+    else:
+        user_id = await accounts.session_user(request)
     connection = await db.connect()
     try:
         rows = await (await connection.execute("SELECT provider,created_at,last_login_at FROM auth_identities WHERE user_id=? ORDER BY provider", (user_id,))).fetchall()

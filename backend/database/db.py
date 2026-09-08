@@ -351,6 +351,45 @@ CREATE TABLE IF NOT EXISTS web_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_hash);
 
+CREATE TABLE IF NOT EXISTS username_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    old_username TEXT,
+    new_username TEXT NOT NULL,
+    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    transaction_id TEXT
+);
+
+CREATE TABLE IF NOT EXISTS cosmetics (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku TEXT NOT NULL UNIQUE,
+    name TEXT NOT NULL,
+    category TEXT NOT NULL,
+    rarity TEXT NOT NULL DEFAULT 'common',
+    metadata_json TEXT,
+    active INTEGER NOT NULL DEFAULT 1,
+    price_cents INTEGER,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS user_cosmetics (
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    cosmetic_id INTEGER NOT NULL REFERENCES cosmetics(id) ON DELETE CASCADE,
+    acquired_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    source TEXT NOT NULL DEFAULT 'earned',
+    transaction_id TEXT,
+    PRIMARY KEY (user_id, cosmetic_id)
+);
+
+CREATE TABLE IF NOT EXISTS user_loadout (
+    user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    board_skin_id INTEGER, piece_set_id INTEGER, board_border_id INTEGER,
+    profile_frame_id INTEGER, background_effect_id INTEGER, move_sound_id INTEGER,
+    capture_sound_id INTEGER, check_sound_id INTEGER, victory_sound_id INTEGER,
+    sound_pack_id INTEGER, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
 CREATE TABLE IF NOT EXISTS competitive_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     game_id INTEGER NOT NULL UNIQUE,
@@ -804,6 +843,21 @@ async def initialize_database():
         await db.executescript(
             POST_MIGRATION_SCHEMA
         )
+        user_columns = await get_table_columns(db, "users")
+        if "username_normalized" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN username_normalized TEXT")
+        if "username_selected_at" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN username_selected_at TIMESTAMP")
+        if "username_change_count" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN username_change_count INTEGER NOT NULL DEFAULT 0")
+        await db.execute("UPDATE users SET username_normalized=LOWER(username) WHERE username_normalized IS NULL")
+        await db.execute("UPDATE users SET username_selected_at=CURRENT_TIMESTAMP WHERE username_selected_at IS NULL")
+        duplicates = await (await db.execute("SELECT username_normalized FROM users WHERE username_normalized IS NOT NULL GROUP BY username_normalized HAVING COUNT(*)>1")).fetchall()
+        for duplicate in duplicates:
+            rows = await (await db.execute("SELECT id FROM users WHERE username_normalized=? ORDER BY id", (duplicate["username_normalized"],))).fetchall()
+            for row in rows[1:]:
+                await db.execute("UPDATE users SET username_normalized=SUBSTR(username_normalized,1,15)||'_'||CAST(id AS TEXT) WHERE id=?", (row["id"],))
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_normalized ON users(username_normalized)")
         # Backfill the canonical Discord provider identity for every existing
         # Bishoply user. This is additive and idempotent.
         await db.execute("INSERT OR IGNORE INTO auth_identities(user_id,provider,subject) SELECT id,'discord',CAST(discord_id AS TEXT) FROM users WHERE discord_id IS NOT NULL")

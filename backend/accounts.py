@@ -93,6 +93,7 @@ async def resolve(provider, subject, metadata):
                 if not inserted:
                     raise RuntimeError("Account creation did not return an id")
                 user_id = inserted["id"]
+                await connection.execute("UPDATE users SET username_normalized=NULL, username_selected_at=NULL WHERE id=?", (user_id,))
             await connection.execute("INSERT INTO auth_identities(user_id,provider,subject,provider_metadata) VALUES (?,?,?,?)", (user_id, provider, subject, json.dumps(metadata)))
         await connection.commit(); return user_id
     except Exception:
