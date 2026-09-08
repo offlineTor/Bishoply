@@ -2,12 +2,12 @@ import { defineConfig } from "vite";
 
 export default defineConfig(({ mode }) => {
   const apiBase = process.env.VITE_API_BASE_URL || "";
-  const runtime = (process.env.VITE_RUNTIME || (mode === "discord" ? "discord" : "web")).toLowerCase();
+  const runtime = (process.env.VITE_RUNTIME || "").toLowerCase();
+  if (!runtime || !["web", "discord"].includes(runtime)) throw new Error("VITE_RUNTIME must be explicitly set to web or discord");
   if (mode === "discord" || runtime === "discord") {
-    if (runtime !== "discord") throw new Error("Discord builds require VITE_RUNTIME=discord");
-    if (process.env.VITE_API_PROXY_BASE && !process.env.VITE_API_PROXY_BASE.startsWith("/")) throw new Error("VITE_API_PROXY_BASE must be a relative proxy path");
-  } else if (mode === "production" && process.env.BISHOPLY_ENV === "production" && !/^https:\/\//i.test(apiBase)) {
-    throw new Error("VITE_API_BASE_URL must be an HTTPS URL for production builds");
+    if (!process.env.VITE_API_PROXY_BASE || !process.env.VITE_API_PROXY_BASE.startsWith("/")) throw new Error("Discord builds require a relative VITE_API_PROXY_BASE");
+  } else {
+    if (!/^https:\/\//i.test(apiBase)) throw new Error("Web builds require an HTTPS VITE_API_BASE_URL");
   }
   return {
   define: { __BISHOPLY_API_BASE__: JSON.stringify(apiBase) },

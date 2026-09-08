@@ -4,7 +4,6 @@ import { LAUNCH_FEATURES } from "./launch-config.js";
 import { GameResult, formatTermination, isEnded } from "./game-result.js";
 import { GameReview } from "./game-review.js";
 import { classificationUi, classificationBadge } from "./classification-ui.js";
-import { DiscordSDK } from "./discord/client.js";
 import { createApiTransport } from "./shared/api-transport.js";
 import { isDiscordRuntime } from "./shared/runtime.js";
 
@@ -4574,6 +4573,7 @@ async function setupBishoply() {
       "Connecting to Discord..."
     );
 
+    const { DiscordSDK } = await import("./discord/client.js");
     discordSdk = new DiscordSDK(CLIENT_ID);
     await discordSdk.ready();
 
