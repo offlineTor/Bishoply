@@ -303,6 +303,12 @@ function setStatus(message) {
   }
 }
 
+function practiceDebug(event, details = {}) {
+  if (import.meta.env?.DEV) {
+    console.debug(`[Bishoply Practice] ${event}`, details);
+  }
+}
+
 
 function setConnectionLabel(message) {
   if (connectionLabel) {
@@ -3168,9 +3174,18 @@ async function loadPracticeBots() {
     }).join("");
     practiceBots.querySelectorAll("[data-start-practice]").forEach(button => {
       button.addEventListener("click", async () => {
+        practiceDebug("start handler fired", {
+          bot_id: button.dataset.startPractice || "",
+          player_color: practiceChoice.player_color,
+        });
         try {
           await createPracticeGame(button.dataset.startPractice, practiceChoice.player_color);
         } catch (error) {
+          practiceDebug("create failed", {
+            status: error?.status || 0,
+            kind: error?.kind || "request_error",
+            message: error?.message || "",
+          });
           practiceCreateBusy = false;
           renderPracticeView("select");
           setPracticeStatus(`Practice error: ${error.message}`);
@@ -3440,6 +3455,8 @@ async function handlePracticeSquareClick(square) {
 }
 
 async function createPracticeGame(botId, color = practiceChoice.player_color) {
+  const ready = appReady && Boolean(currentProfile?.discord_id);
+  practiceDebug("readiness", { ready, app_ready: appReady, has_profile: Boolean(currentProfile?.discord_id) });
   if (!requireReady()) return;
   if (practiceCreateBusy) return;
   if (!botId) {
@@ -3457,6 +3474,11 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
   if (practiceLoadingBot) practiceLoadingBot.textContent = selectedBot.display_name || botId;
   if (practiceLoadingStrength) practiceLoadingStrength.textContent = `Estimated Bot Strength ${formatNumber(selectedBot.estimated_strength)}`;
   if (practiceLoadingCopy) practiceLoadingCopy.textContent = launchCopy[botId] || "Preparing the board…";
+  practiceDebug("create request", {
+    bot_id: botId,
+    player_color: practiceChoice.player_color,
+    path: "/api/practice/games",
+  });
   const game = await apiFetch("/api/practice/games", {
     method: "POST",
     headers: {
@@ -3469,6 +3491,7 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
       player_color: practiceChoice.player_color,
       }),
   });
+  practiceDebug("create response", { game_id: game?.game_id || "", status: game?.status || "" });
   practiceCreateBusy = false;
   const { access_key, ...practiceGameData } = game;
   practiceAccessKey = access_key;
@@ -3488,6 +3511,7 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
   practiceAnalysisState = { status: "idle", message: "Analysis pending", classification: null };
   setPracticeStatus(`Practice started against ${game.bot.display_name}.`);
   await renderPracticeGame(practiceGame);
+  practiceDebug("game transition", { game_id: practiceGame?.game_id || "", view: "match" });
   if (game.needs_bot_move) {
     await startPracticeBotIfNeeded();
   }
@@ -4529,7 +4553,22 @@ async function setupBishoply() {
     renderPracticeShell();
     await loadPracticeBots();
 
-    await loadHistory();
+    // History is a secondary panel. A transient history failure must not
+    // invalidate an otherwise authenticated, playable session.
+    try {
+      await loadHistory();
+    } catch (error) {
+      if (import.meta.env?.DEV) {
+        console.debug("[Bishoply Startup] history load skipped", {
+          status: error?.status || 0,
+          kind: error?.kind || "request_error",
+          message: error?.message || "",
+        });
+      }
+      if (historyList) {
+        historyList.innerHTML = `<div class="empty-mini"><strong>History temporarily unavailable.</strong><span>Try again shortly.</span></div>`;
+      }
+    }
 
     startGameSync();
 
