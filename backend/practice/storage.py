@@ -8,7 +8,7 @@ from backend.database import db as database
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS practice_games (
- id INTEGER PRIMARY KEY,
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
  public_id TEXT NOT NULL UNIQUE,
  mode TEXT NOT NULL DEFAULT 'practice' CHECK(mode='practice'),
  owner_discord_id BIGINT NOT NULL,
@@ -37,7 +37,7 @@ CREATE TABLE IF NOT EXISTS practice_games (
  completed_at TEXT
 );
 CREATE TABLE IF NOT EXISTS practice_moves (
- id INTEGER PRIMARY KEY,
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
  game_id INTEGER NOT NULL REFERENCES practice_games(id) ON DELETE CASCADE,
  ply INTEGER NOT NULL,
  move_number INTEGER NOT NULL,

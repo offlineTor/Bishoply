@@ -26,6 +26,7 @@ from backend.database.db import (
     get_or_create_user,
     initialize_database,
     migrate_discord_id_columns,
+    migrate_practice_identity_columns,
 )
 from backend.security import SharedRateLimiter, client_key, is_production
 
@@ -166,6 +167,17 @@ async def startup():
     finally:
         await db.close()
     startup_log.info("Bishoply Discord ID migration complete")
+    startup_log.info("Bishoply Practice identity migration start")
+    db = await connect()
+    try:
+        await migrate_practice_identity_columns(db)
+        await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
+    finally:
+        await db.close()
+    startup_log.info("Bishoply Practice identity migration complete")
     if ENVIRONMENT == "production" or os.getenv("BISHOPLY_BOT_IN_APP", "false").lower() == "true":
         from bot import start_bot
         startup_log.info("Calling Bishoply Discord start_bot()")
