@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import logging
 
 import httpx
 from dotenv import load_dotenv
@@ -30,6 +31,7 @@ from backend.security import SharedRateLimiter, client_key, is_production
 load_dotenv()
 
 ENVIRONMENT = os.getenv("BISHOPLY_ENV", "development").strip().lower()
+startup_log = logging.getLogger("uvicorn.error")
 
 CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
@@ -137,12 +139,15 @@ class ExchangeRequest(BaseModel):
 
 @app.on_event("startup")
 async def startup():
+    startup_log.info("Bishoply production startup: environment=%s", ENVIRONMENT)
+    startup_log.info("Discord bot token configured: %s", "yes" if os.getenv("DISCORD_BOT_TOKEN") else "no")
     await initialize_database()
     await initialize_practice()
     await initialize_analysis()
     await matchmaking.initialize()
     if ENVIRONMENT == "production" or os.getenv("BISHOPLY_BOT_IN_APP", "false").lower() == "true":
         from bot import start_bot
+        startup_log.info("Calling Bishoply Discord start_bot()")
         await start_bot()
 
 

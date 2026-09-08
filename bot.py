@@ -10,7 +10,9 @@ import discord
 from dotenv import load_dotenv
 
 load_dotenv()
-log = logging.getLogger("bishoply.discord")
+# Uvicorn configures this logger in Render; lifecycle messages are therefore
+# captured alongside application startup logs.
+log = logging.getLogger("uvicorn.error")
 client: discord.Client | None = None
 _task: asyncio.Task | None = None
 
@@ -48,7 +50,7 @@ async def start_bot() -> asyncio.Task | None:
         except asyncio.CancelledError:
             raise
         except Exception as error:
-            log.error("Discord Gateway connection failed (%s); API will continue running", type(error).__name__)
+            log.error("Discord Gateway connection failed (%s): gateway connection failed; API will continue running", type(error).__name__)
 
     _task = asyncio.create_task(run(), name="bishoply-discord-gateway")
     log.info("Discord Gateway task created")
