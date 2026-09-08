@@ -97,7 +97,7 @@ async def initialize():
         await db.close()
 
 
-async def require_game(db, public_id, key=None):
+async def require_game(db, public_id, key=None, owner_user_id=None, owner_discord_id=None):
     game=await (await db.execute('SELECT * FROM practice_games WHERE public_id=?',(public_id,))).fetchone()
     if game is None:
         raise HTTPException(404,'Practice game not found')
@@ -105,6 +105,13 @@ async def require_game(db, public_id, key=None):
         raise HTTPException(403,'Practice mode required')
     if key is not None and not hmac.compare_digest(key_hash(key),game['access_hash']):
         raise HTTPException(403,'Invalid Practice access key')
+    if key is None and owner_user_id is not None:
+        owned = game['owner_user_id'] == owner_user_id or (
+            owner_discord_id is not None and game['owner_discord_id'] == owner_discord_id)
+        if not owned:
+            raise HTTPException(403, 'Practice game access denied')
+    elif key is None and owner_user_id is None:
+        raise HTTPException(401, 'Practice access key required')
     return game
 
 

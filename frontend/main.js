@@ -115,6 +115,14 @@ let reviewPosition = null;
 let reviewFlipped = false;
 let practiceGame = null;
 let practiceAccessKey = null;
+
+function practiceAuthHeaders(headers = {}) {
+  return practiceAccessKey ? { ...headers, "X-Practice-Key": practiceAccessKey } : headers;
+}
+
+function canAccessPracticeGame() {
+  return Boolean(practiceAccessKey || currentProfile);
+}
 let practiceReviewPosition = null;
 let practiceReviewFlipped = false;
 let practiceSelectedSquare = null;
@@ -3126,12 +3134,12 @@ function renderPracticeShell() {
 }
 
 async function undoPracticeGame() {
-  if (!practiceGame?.game_id || !practiceAccessKey || practiceBusy) return;
+  if (!practiceGame?.game_id || !canAccessPracticeGame() || practiceBusy) return;
   practiceBusy = true;
   practiceUndoButton && (practiceUndoButton.disabled = true);
   try {
     const game = await apiFetch(`/api/practice/games/${practiceGame.game_id}/undo`, {
-      method: "POST", headers: { "X-Practice-Key": practiceAccessKey },
+      method: "POST", headers: practiceAuthHeaders(),
     });
     practiceGame = decoratePracticeGame(game);
     for (const ply of [...practiceMoveAnalysis.keys()]) {
@@ -3208,6 +3216,24 @@ async function loadPracticeBots() {
   }
 }
 
+async function recoverActivePractice() {
+  if (!currentProfile) return false;
+  try {
+    const active = await apiFetch("/api/practice/active");
+    if (!active?.active || !active.game_id) return false;
+    const game = active.game || await apiFetch(`/api/practice/games/${active.game_id}`, { headers: practiceAuthHeaders() });
+    practiceAccessKey = null;
+    practiceGame = decoratePracticeGame(game);
+    await renderPracticeGame(practiceGame);
+    if (practiceGame.needs_bot_move) await startPracticeBotIfNeeded();
+    setPracticeStatus(`Practice resumed against ${getPracticeBot(practiceGame)?.display_name || "the bot"}.`);
+    return true;
+  } catch (error) {
+    if (import.meta.env?.DEV) console.debug("[Bishoply Startup] active Practice recovery skipped", { status: error?.status || 0 });
+    return false;
+  }
+}
+
 async function startPracticeBotIfNeeded() {
   if (!practiceGame?.game_id || practiceGame.status !== "active" || !practiceGame.needs_bot_move || practiceBotBusy) {
     return;
@@ -3221,7 +3247,7 @@ async function startPracticeBotIfNeeded() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Practice-Key": practiceAccessKey,
+        ...practiceAuthHeaders(),
       },
       body: JSON.stringify({ expected_ply: practiceGame.ply }),
     });
@@ -3250,11 +3276,11 @@ function parseAnalysisMove(data, ply) {
 }
 
 async function requestPracticeAnalysis(ply, start = false) {
-  if (!practiceGame?.game_id || !practiceAccessKey) return;
+  if (!practiceGame?.game_id || !canAccessPracticeGame()) return;
   try {
     const data = await apiFetch(`/api/practice/games/${practiceGame.game_id}/analysis/${ply}`, {
       method: start ? "POST" : "GET",
-      headers: { "X-Practice-Key": practiceAccessKey },
+      headers: practiceAuthHeaders(),
     });
     practicePendingAnalysis = { ply, status: data.status };
     if (data.result) {
@@ -3360,17 +3386,17 @@ function clearPracticeHints() {
 }
 
 async function requestPracticeHint(stage) {
-  if (!practiceGame?.game_id || !practiceAccessKey) return;
+  if (!practiceGame?.game_id || !canAccessPracticeGame()) return;
   const data = await apiFetch(`/api/practice/games/${practiceGame.game_id}/hint`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Practice-Key": practiceAccessKey,
+      ...practiceAuthHeaders(),
     },
     body: JSON.stringify({ expected_ply: practiceGame.ply, stage }),
   });
   practiceGame = await apiFetch(`/api/practice/games/${practiceGame.game_id}`, {
-    headers: { "X-Practice-Key": practiceAccessKey },
+    headers: practiceAuthHeaders(),
   });
   practiceGame = decoratePracticeGame(practiceGame);
   setPracticeMoveState();
@@ -3382,7 +3408,7 @@ async function requestPracticeHint(stage) {
 }
 
 async function submitPracticeMove(uci) {
-  if (!practiceGame?.game_id || !practiceAccessKey || practiceBusy || !practiceCanMove) return;
+  if (!practiceGame?.game_id || !canAccessPracticeGame() || practiceBusy || !practiceCanMove) return;
   practiceBusy = true;
   selectedSquare = null;
   practiceSelectedSquare = null;
@@ -3393,7 +3419,7 @@ async function submitPracticeMove(uci) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "X-Practice-Key": practiceAccessKey,
+        ...practiceAuthHeaders(),
       },
       body: JSON.stringify({ move: uci, expected_ply: practiceGame.ply }),
     });
@@ -3679,9 +3705,7 @@ async function renderGame(game) {
 
 
 async function refreshProfile() {
-  if (
-    !currentProfile?.discord_id
-  ) {
+  if (!currentProfile) {
     return;
   }
 
@@ -3708,16 +3732,18 @@ async function loadAccountConnections() {
 
 
 async function loadHistory() {
-  if (
-    !currentProfile?.discord_id
-  ) {
+  if (!currentProfile) {
     return;
   }
 
-  const data =
-    await apiFetch(
-      `/api/games/history/${currentProfile.discord_id}?limit=20`
-    );
+  const historyRequests = [apiFetch("/api/practice/history?limit=20")];
+  if (currentProfile.discord_id) {
+    historyRequests.push(apiFetch(`/api/games/history/${currentProfile.discord_id}?limit=20`));
+  }
+  const historyResults = await Promise.allSettled(historyRequests);
+  const data = {
+    games: historyResults.flatMap((result) => result.status === "fulfilled" ? (result.value.games || []) : [])
+  };
 
   if (!historyList) {
     return;
@@ -3742,19 +3768,10 @@ async function loadHistory() {
   historyList.innerHTML =
     data.games
       .map((game) => {
-        const opponent =
-          game.user_color ===
-          "white"
-            ? (
-                game.black?.display_name ||
-                game.black?.username ||
-                "Waiting"
-              )
-            : (
-                game.white?.display_name ||
-                game.white?.username ||
-                "Waiting"
-              );
+        const opponent = game.opponent?.display_name || game.opponent?.username ||
+          (game.user_color === "white"
+            ? (game.black?.display_name || game.black?.username || "Waiting")
+            : (game.white?.display_name || game.white?.username || "Waiting"));
 
         let status =
           game.user_result;
@@ -4500,6 +4517,7 @@ async function setupBishoply() {
       renderEmptyGame();
       renderPracticeShell();
       await loadPracticeBots();
+      if (appReady) await recoverActivePractice();
       return;
     }
 
@@ -4603,6 +4621,7 @@ async function setupBishoply() {
     renderEmptyGame();
     renderPracticeShell();
     await loadPracticeBots();
+    await recoverActivePractice();
 
     // History is a secondary panel. A transient history failure must not
     // invalidate an otherwise authenticated, playable session.

@@ -1,13 +1,16 @@
 """Practice routes never accept arbitrary FENs or mutate multiplayer games."""
 from typing import Literal
+import logging
 from fastapi import APIRouter, Header, Query, Depends, HTTPException, Request as HttpRequest
 from pydantic import BaseModel, ConfigDict, Field
 from backend.practice import config, service
 from backend.analysis.service import get_review
 from backend.practice.auth import discord_identity
 from backend import accounts
+from backend.database import db
 
 router = APIRouter(prefix='/api/practice', tags=['unrated practice'])
+log = logging.getLogger('uvicorn.error')
 
 
 class Request(BaseModel):
@@ -54,34 +57,113 @@ async def list_bots():
             'bots':[bot.public() for bot in config.ROSTER]}
 
 
+async def canonical_owner(request: HttpRequest, authorization: str | None = None):
+    if authorization:
+        discord_id = await discord_identity(authorization)
+        connection = await db.connect()
+        try:
+            row = await (await connection.execute("SELECT id FROM users WHERE discord_id=?", (discord_id,))).fetchone()
+            if row:
+                return row['id'], discord_id
+        finally:
+            await connection.close()
+        raise HTTPException(404, 'Bishoply user not found')
+    return await accounts.session_user(request), None
+
+
+async def authenticated_owner(request: HttpRequest, authorization: str | None = Header(None)):
+    return await canonical_owner(request, authorization)
+
+
+@router.get('/active')
+async def active_game(request: HttpRequest, authorization: str | None = Header(None)):
+    user_id, discord_id = await authenticated_owner(request, authorization)
+    connection = await db.connect()
+    try:
+        rows = await (await connection.execute("""SELECT public_id FROM practice_games
+            WHERE status='active' AND (owner_user_id=? OR (? IS NOT NULL AND owner_discord_id=?))
+            ORDER BY created_at DESC, id DESC""", (user_id, discord_id, discord_id))).fetchall()
+        if not rows:
+            return {'active': False, 'game': None}
+        if len(rows) > 1:
+            log.warning('practice_active_multiple_games user=%s count=%s', user_id, len(rows))
+        # The access-key capability is intentionally bypassed only after the
+        # canonical authenticated owner has been verified server-side.
+        game = await service.get(rows[0]['public_id'], owner_user_id=user_id, owner_discord_id=discord_id)
+        return {'active': True, 'game_id': rows[0]['public_id'], 'game': game}
+    finally:
+        await connection.close()
+
+
+@router.get('/history')
+async def practice_history(request: HttpRequest, authorization: str | None = Header(None), limit: int = Query(20, ge=1, le=100), offset: int = Query(0, ge=0, le=100000)):
+    user_id, discord_id = await canonical_owner(request, authorization)
+    connection = await db.connect()
+    try:
+        rows = await (await connection.execute("""SELECT public_id,player_color,bot_id,status,result,termination_reason,ply,created_at,updated_at,completed_at
+            FROM practice_games WHERE (owner_user_id=? OR (? IS NOT NULL AND owner_discord_id=?))
+            ORDER BY created_at DESC LIMIT ? OFFSET ?""", (user_id, discord_id, discord_id, limit, offset))).fetchall()
+        games = []
+        for row in rows:
+            status = row['status']
+            player_color = row['player_color']
+            if status == 'active':
+                user_result = 'in_progress'
+            elif status == 'draw':
+                user_result = 'draw'
+            else:
+                winner = 'white' if status == 'white_win' else 'black'
+                user_result = 'win' if winner == player_color else 'loss'
+            bot = config.BOTS.get(row['bot_id'])
+            opponent = {'display_name': bot.display_name if bot else 'Bishoply Bot', 'username': bot.bot_id if bot else None}
+            games.append({
+                'game_id': row['public_id'], 'public_id': row['public_id'],
+                'user_color': player_color, 'user_result': user_result,
+                'status': status, 'result': row['result'],
+                'termination_reason': row['termination_reason'],
+                'move_count': row['ply'], 'ply': row['ply'],
+                'created_at': row['created_at'], 'updated_at': row['updated_at'],
+                'completed_at': row['completed_at'], 'competitive_decision': None,
+                'opponent': opponent,
+            })
+        return {'games': games, 'limit': limit, 'offset': offset}
+    finally:
+        await connection.close()
+
+
 @router.post('/games',status_code=201)
 async def create_game(payload: CreateRequest, request: HttpRequest, authorization: str | None = Header(None)):
     owner_id = await practice_owner(request, authorization)
     if owner_id is not None:
         if payload.discord_id != owner_id:
+            log.warning('practice_ownership_denied reason=discord_id_mismatch bot=%s', payload.bot_id)
             raise HTTPException(403,'Discord identity does not match the requested player')
         return await service.create(owner_id, payload.bot_id, payload.player_color)
     if payload.discord_id is not None:
         # A browser session is identified by its HttpOnly session cookie; a
         # client-supplied Discord id is never accepted as a substitute.
+        log.warning('practice_ownership_denied reason=unauthenticated_payload bot=%s', payload.bot_id)
         raise HTTPException(422, 'Authenticate with Bishoply before creating Practice')
     user_id = await accounts.session_user(request)
     return await service.create(None, payload.bot_id, payload.player_color, user_id=user_id)
 
 
 @router.get('/games/{game_id}')
-async def read_game(game_id: str, x_practice_key: str = Header(...)):
-    return await service.get(game_id,x_practice_key)
+async def read_game(game_id: str, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await service.get(game_id,x_practice_key,*(owner or (None,None)))
 
 
 @router.post('/games/{game_id}/move')
-async def player_move(game_id: str, payload: MoveRequest, x_practice_key: str = Header(...)):
-    return await service.player_move(game_id,x_practice_key,payload.move,payload.expected_ply)
+async def player_move(game_id: str, payload: MoveRequest, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await service.player_move(game_id,x_practice_key,payload.move,payload.expected_ply,*(owner or (None,None)))
 
 
 @router.post('/games/{game_id}/bot-move')
-async def bot_move(game_id: str, payload: PositionRequest, x_practice_key: str = Header(...)):
-    return await service.bot_response(game_id,x_practice_key,payload.expected_ply)
+async def bot_move(game_id: str, payload: PositionRequest, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await service.bot_response(game_id,x_practice_key,payload.expected_ply,*(owner or (None,None)))
 
 
 @router.post('/games/{game_id}/hint')
@@ -90,13 +172,15 @@ async def hint(game_id: str, payload: HintRequest, x_practice_key: str = Header(
 
 
 @router.post('/games/{game_id}/resign')
-async def resign(game_id: str, x_practice_key: str = Header(...)):
-    return await service.resign(game_id,x_practice_key)
+async def resign(game_id: str, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await service.resign(game_id,x_practice_key,*(owner or (None,None)))
 
 
 @router.post('/games/{game_id}/undo')
-async def undo(game_id: str, x_practice_key: str = Header(...)):
-    return await service.undo(game_id, x_practice_key)
+async def undo(game_id: str, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await service.undo(game_id, x_practice_key,*(owner or (None,None)))
 
 
 @router.get('/games/{game_id}/analysis/{ply}')

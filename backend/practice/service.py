@@ -50,15 +50,16 @@ async def create(discord_id, bot_id, color, user_id=None):
             bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot_config),chess.STARTING_FEN,chess.STARTING_FEN))
         await db.commit()
         game=await storage.require_game(db,public_id,key)
+        log.info("practice_create game=%s bot=%s owner_mode=%s", public_id, bot_id, 'discord' if discord_id is not None else 'web')
         return {**await storage.serialize(db,game),'access_key':key}
     finally:
         await db.close()
 
 
-async def get(public_id,key):
+async def get(public_id,key=None,owner_user_id=None,owner_discord_id=None):
     db=await database.connect()
     try:
-        return await storage.serialize(db,await storage.require_game(db,public_id,key))
+        return await storage.serialize(db,await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id))
     finally:
         await db.close()
 
@@ -82,11 +83,11 @@ async def append_move(db,game,board,move,actor,metadata=None):
         (board.fen(),status,result.result() if result else None,result.termination.name.lower() if result else None,status,game['id']))
 
 
-async def player_move(public_id,key,uci,ply):
+async def player_move(public_id,key,uci,ply,owner_user_id=None,owner_discord_id=None):
     db=await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
-        game=await storage.require_game(db,public_id,key)
+        game=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
         board,_=await storage.load_board(db,game)
         check_turn(game,board,ply,'player')
         if game['operation_id']:
@@ -101,14 +102,15 @@ async def player_move(public_id,key,uci,ply):
         await db.commit()
     finally:
         await db.close()
-    return {**await get(public_id,key),'analysis':{'status':'queued','ply':ply+1}}
+    log.info("practice_move game=%s ply=%s", public_id, ply + 1)
+    return {**await get(public_id,key,owner_user_id,owner_discord_id),'analysis':{'status':'queued','ply':ply+1}}
 
 
-async def claim_operation(public_id,key,ply,actor):
+async def claim_operation(public_id,key,ply,actor,owner_user_id=None,owner_discord_id=None):
     db=await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
-        game=await storage.require_game(db,public_id,key)
+        game=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
         board,_=await storage.load_board(db,game)
         check_turn(game,board,ply,actor)
         if game['operation_id']:
@@ -130,8 +132,8 @@ async def release_operation(public_id,operation,error=None):
         await db.close()
 
 
-async def bot_response(public_id,key,ply):
-    game,board,operation=await claim_operation(public_id,key,ply,'bot')
+async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=None):
+    game,board,operation=await claim_operation(public_id,key,ply,'bot',owner_user_id,owner_discord_id)
     claimed_revision = int(game.get('revision', 0))
     error=None
     log.info("Bishoply Practice bot generation started bot=%s side=%s ply=%s", game['bot_id'],
@@ -144,7 +146,7 @@ async def bot_response(public_id,key,ply):
         db=await database.connect()
         try:
             await db.execute('BEGIN IMMEDIATE')
-            latest=await storage.require_game(db,public_id,key)
+            latest=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
             check_turn(latest,board,ply,'bot')
             if (latest['operation_id']!=operation or
                     int(latest['revision'])!=claimed_revision or
@@ -161,7 +163,7 @@ async def bot_response(public_id,key,ply):
         raise HTTPException(503,error) from exc
     finally:
         await release_operation(public_id,operation,error)
-    result = await get(public_id,key)
+    result = await get(public_id,key,owner_user_id,owner_discord_id)
     log.info("Bishoply Practice bot response complete bot=%s ply=%s", game['bot_id'], result.get('ply'))
     return result
 
@@ -175,8 +177,8 @@ def projected_hint(result,stage):
     return output
 
 
-async def hint(public_id,key,ply,stage):
-    game,board,operation=await claim_operation(public_id,key,ply,'player')
+async def hint(public_id,key,ply,stage,owner_user_id=None,owner_discord_id=None):
+    game,board,operation=await claim_operation(public_id,key,ply,'player',owner_user_id,owner_discord_id)
     try:
         existing=game['hint_stage'] if game['hint_ply']==ply else 0
         if stage>existing+1:
@@ -185,7 +187,7 @@ async def hint(public_id,key,ply,stage):
         db=await database.connect()
         try:
             await db.execute('BEGIN IMMEDIATE')
-            latest=await storage.require_game(db,public_id,key)
+            latest=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
             check_turn(latest,board,ply,'player')
             if latest['operation_id']!=operation:
                 raise HTTPException(409,'Position changed during hint')
@@ -222,11 +224,11 @@ async def _rebuild_context(db, game_id, max_ply):
     await db.execute('DELETE FROM practice_coach_context WHERE game_id=?', (game_id,))
 
 
-async def undo(public_id, key):
+async def undo(public_id, key=None, owner_user_id=None, owner_discord_id=None):
     db = await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
-        game = await storage.require_game(db, public_id, key)
+        game = await storage.require_game(db, public_id, key, owner_user_id, owner_discord_id)
         if game['status'] != 'active':
             raise HTTPException(409, 'Completed Practice games cannot be undone')
         rows = await (await db.execute('SELECT * FROM practice_moves WHERE game_id=? ORDER BY ply DESC', (game['id'],))).fetchall()
@@ -251,21 +253,21 @@ async def undo(public_id, key):
         await db.commit()
     finally:
         await db.close()
-    fresh = await get(public_id, key)
+    fresh = await get(public_id, key, owner_user_id, owner_discord_id)
     fresh['removed_plies'] = len(remove)
     fresh['undo_count'] = 1
     return fresh
 
 
-async def resign(public_id,key):
+async def resign(public_id,key=None,owner_user_id=None,owner_discord_id=None):
     db=await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
-        game=await storage.require_game(db,public_id,key)
+        game=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
         if game['status']=='active':
             status='black_win' if game['player_color']=='white' else 'white_win'
             await db.execute("UPDATE practice_games SET status=?,result=?,termination_reason='resignation',operation_id=NULL,completed_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=?",(status,'0-1' if status=='black_win' else '1-0',game['id']))
         await db.commit()
     finally:
         await db.close()
-    return await get(public_id,key)
+    return await get(public_id,key,owner_user_id,owner_discord_id)
