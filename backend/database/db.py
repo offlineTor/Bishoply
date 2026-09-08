@@ -96,9 +96,13 @@ class PostgresCompatConnection:
         return _CompatCursor(cursor)
 
     async def executescript(self, script):
-        for statement in script.split(";"):
-            if statement.strip():
-                await self.execute(statement)
+        try:
+            for statement in script.split(";"):
+                if statement.strip():
+                    await self.execute(statement)
+        except Exception:
+            await self.rollback()
+            raise
 
     async def commit(self):
         await self._connection.commit()
@@ -777,6 +781,9 @@ async def initialize_database():
         await bootstrap_competitive_profiles(
             db
         )
+    except Exception:
+        await db.rollback()
+        raise
 
     finally:
         await db.close()

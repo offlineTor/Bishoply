@@ -13,6 +13,27 @@ class PostgreSQLIntegrationTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(callable(_compat_row_factory(Cursor())))
 
+    async def test_script_failure_rolls_back_before_reraising(self):
+        from backend.database.db import PostgresCompatConnection
+
+        class Connection:
+            def __init__(self):
+                self.rolled_back = False
+            async def execute(self, sql, params):
+                if "FAIL" in sql:
+                    raise RuntimeError("synthetic SQL failure")
+                return object()
+            async def rollback(self):
+                self.rolled_back = True
+            async def commit(self): pass
+            async def close(self): pass
+
+        raw = Connection()
+        db = PostgresCompatConnection(raw)
+        with self.assertRaises(RuntimeError):
+            await db.executescript("CREATE TABLE ok (id INTEGER); FAIL;")
+        self.assertTrue(raw.rolled_back)
+
     async def test_postgres_round_trip(self):
         url = os.getenv("TEST_DATABASE_URL")
         if not url:

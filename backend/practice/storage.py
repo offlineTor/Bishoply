@@ -71,12 +71,14 @@ async def initialize():
     db=await database.connect()
     try:
         await db.executescript(SCHEMA)
-        try:
+        columns = await database.get_table_columns(db, "practice_games")
+        if "revision" not in columns:
             await db.execute("ALTER TABLE practice_games ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
-        except Exception:
-            pass
         await db.execute("UPDATE practice_games SET operation_id=NULL,bot_error='Operation interrupted; retry' WHERE operation_id IS NOT NULL")
         await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         await db.close()
 

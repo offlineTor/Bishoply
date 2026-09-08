@@ -34,6 +34,9 @@ async def initialize():
     try:
         await db.executescript(SCHEMA)
         await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         await db.close()
 

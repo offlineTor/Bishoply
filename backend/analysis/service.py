@@ -73,6 +73,9 @@ async def initialize():
         await db.executescript(SCHEMA)
         await db.execute("UPDATE analysis_revisions SET status='failed',error='Interrupted; request a new revision' WHERE status='analyzing'")
         await db.commit()
+    except Exception:
+        await db.rollback()
+        raise
     finally:
         await db.close()
     _worker = [asyncio.create_task(work_loop(lane)) for lane in ('fast','deep','feedback')]
