@@ -15,6 +15,19 @@ const isDiscordActivity = ["frame_id", "instance_id", "platform"]
   .every((key) => Boolean(discordQuery.get(key)));
 let discordSdk = null;
 
+const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "").replace(/\/$/, "");
+
+function backendRequestUrl(path) {
+  if (/^https?:\/\//i.test(path)) return path;
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  // Discord's Activity mapping proxies /api/* to the backend root. Keep
+  // existing API paths intact and prefix non-API routes such as /health.
+  const activityPath = normalized === "/api" || normalized.startsWith("/api/")
+    ? normalized
+    : `/api${normalized}`;
+  return isDiscordActivity ? activityPath : `${API_BASE_URL}${normalized}`;
+}
+
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
@@ -125,7 +138,7 @@ const coachFeatures = Object.freeze({ hints: true, advancedCoach: false });
 const chessSound = new ChessSound([$("#chess-sound-button"), practiceSoundButton]);
 const emmaVoice = new EmmaVoiceManager({
   remoteSpeak: async text => {
-    const response = await fetch("/api/voice/speak", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+    const response = await fetch(backendRequestUrl("/api/voice/speak"), { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
     if (!response.ok) throw new Error(`Emma voice service unavailable (${response.status})`);
     const audio = new Audio(URL.createObjectURL(await response.blob()));
     audio.addEventListener("ended", () => URL.revokeObjectURL(audio.src), { once: true });
@@ -360,10 +373,16 @@ function setControlsEnabled(enabled) {
 }
 
 
-const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "").replace(/\/$/, "");
-
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
+  const normalizedPath = typeof path === "string" && path.startsWith("/") ? path : "";
+  const publicPath = normalizedPath === "/health" || normalizedPath === "/api/health" || normalizedPath === "/api/auth/discord" || normalizedPath === "/api/practice/bots";
+  // FastAPI protects these routes with a required Authorization header. Do
+  // not send a guaranteed-422 request while Discord authentication is still
+  // completing; surface the normal safe auth state instead.
+  if (normalizedPath.startsWith("/api/") && !publicPath && !discordAccessToken) {
+    throw new ApiError("Discord authentication is still loading. Please try again shortly.", "unauthorized", 401);
+  }
   if (discordAccessToken && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${discordAccessToken}`);
   }
@@ -371,7 +390,7 @@ async function apiFetch(path, options = {}) {
   const timeout = window.setTimeout(() => controller.abort(), options.timeoutMs || 12000);
   let response;
   try {
-    const target = /^https?:\/\//i.test(path) ? path : `${API_BASE_URL}${path}`;
+    const target = backendRequestUrl(path);
     response = await fetch(target, { ...options, headers, signal: options.signal || controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") throw new ApiError("Request timed out. Please try again.", "timeout", 0);
