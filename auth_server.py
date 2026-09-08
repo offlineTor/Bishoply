@@ -91,7 +91,8 @@ async def security_middleware(request: Request, call_next):
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; connect-src 'self' https://discord.com https://*.discordsays.com https://*.trycloudflare.com; img-src 'self' data: https://cdn.discordapp.com; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' https://*.discordsays.com; frame-ancestors https://*.discordsays.com https://discord.com")
+    tunnel_origin = "" if is_production() else " https://*.trycloudflare.com"
+    response.headers.setdefault("Content-Security-Policy", "default-src 'self'; connect-src 'self' https://bishoply.onrender.com https://discord.com https://*.discordsays.com" + tunnel_origin + "; img-src 'self' data: https://cdn.discordapp.com; media-src 'self' blob:; style-src 'self' 'unsafe-inline'; script-src 'self' https://*.discordsays.com; frame-ancestors https://*.discordsays.com https://discord.com")
     if is_production():
         response.headers.setdefault("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
     import logging

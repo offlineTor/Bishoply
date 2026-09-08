@@ -2,6 +2,12 @@
 
 ## Render Docker staging/production
 
+Current staging endpoints:
+
+- Frontend: https://bishoply-staging.onrender.com
+- API: https://bishoply.onrender.com
+
+
 Create a Render **Web Service** using the repository root as the Docker build
 context and the root `Dockerfile`. Use the Virginia region. Render supplies
 `PORT`; the image starts with:
@@ -21,8 +27,8 @@ never in the repository:
 BISHOPLY_ENV=production
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://...
-BISHOPLY_ALLOWED_ORIGINS=https://staging.example.com
-BISHOPLY_FRONTEND_ORIGIN=https://staging.example.com
+BISHOPLY_ALLOWED_ORIGINS=https://bishoply-staging.onrender.com
+BISHOPLY_FRONTEND_ORIGIN=https://bishoply-staging.onrender.com
 BISHOPLY_READINESS_TOKEN=<generated-secret>
 DISCORD_CLIENT_ID=<staging-application-id>
 DISCORD_CLIENT_SECRET=<staging-client-secret>
