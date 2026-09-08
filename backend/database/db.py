@@ -5,7 +5,7 @@ import re
 from pathlib import Path
 from backend.database.migrations import (
     DISCORD_ID_MIGRATION_VERSION,
-    PRACTICE_IDENTITY_MIGRATION_VERSION,
+    ANALYSIS_IDENTITY_MIGRATION_VERSION,
     SCHEMA_VERSION,
     record_version,
 )
@@ -857,7 +857,7 @@ async def migrate_practice_identity_columns(db):
         return
 
     migration_log = logging.getLogger("uvicorn.error")
-    for table in ("practice_games", "practice_moves"):
+    for table in ("practice_games", "practice_moves", "analysis_revisions"):
         column = await (
             await db.execute(
                 "SELECT is_identity, column_default FROM information_schema.columns "
@@ -879,7 +879,7 @@ async def migrate_practice_identity_columns(db):
             )
             migration_log.info("%s.id identity=generated", table)
 
-    await record_version(db, PRACTICE_IDENTITY_MIGRATION_VERSION)
+    await record_version(db, ANALYSIS_IDENTITY_MIGRATION_VERSION)
 
 
 async def ensure_competitive_profile(

@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS game_analysis (
  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE IF NOT EXISTS analysis_revisions (
- id INTEGER PRIMARY KEY, subject_type TEXT NOT NULL CHECK(subject_type IN ('live','practice','feedback')),
+ id INTEGER PRIMARY KEY AUTOINCREMENT, subject_type TEXT NOT NULL CHECK(subject_type IN ('live','practice','feedback')),
  subject_id TEXT NOT NULL, target_ply INTEGER NOT NULL DEFAULT 0, revision INTEGER NOT NULL,
  model_version TEXT NOT NULL, classifier_version TEXT NOT NULL, accuracy_model_version TEXT NOT NULL,
  status TEXT NOT NULL CHECK(status IN ('queued','analyzing','complete','failed')),

@@ -3586,11 +3586,9 @@ async def list_user_games(
                 black.avatar_url
                     AS black_avatar_url,
 
-                COUNT(gm.id)
-                    AS move_count,
+                gm.move_count,
 
-                MAX(gm.created_at)
-                    AS last_move_at,
+                gm.last_move_at,
 
                 ct.decision
                     AS competitive_decision,
@@ -3617,9 +3615,12 @@ async def list_user_games(
                 ON black.id =
                     g.black_user_id
 
-            LEFT JOIN game_moves gm
-                ON gm.game_id =
-                    g.id
+            LEFT JOIN (
+                SELECT game_id, COUNT(*) AS move_count, MAX(created_at) AS last_move_at
+                FROM game_moves
+                GROUP BY game_id
+            ) gm
+                ON gm.game_id = g.id
 
             LEFT JOIN competitive_transactions ct
                 ON ct.game_id =
@@ -3629,9 +3630,6 @@ async def list_user_games(
                 g.white_user_id = ?
                 OR
                 g.black_user_id = ?
-
-            GROUP BY
-                g.id
 
             ORDER BY
                 g.updated_at DESC,
