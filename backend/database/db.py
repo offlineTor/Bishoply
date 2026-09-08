@@ -48,8 +48,6 @@ class _CompatCursor:
 
 def _compat_row_factory(cursor):
     """Dict-like rows that also preserve legacy integer indexing."""
-    names = [column.name for column in cursor.description]
-
     class Row(dict):
         def __getitem__(self, key):
             if isinstance(key, int):
@@ -57,6 +55,10 @@ def _compat_row_factory(cursor):
             return super().__getitem__(key)
 
     def make(values):
+        # psycopg calls the row-factory builder for every cursor, including
+        # DDL/non-row statements where description is None.  Resolve column
+        # names only when an actual row is materialized.
+        names = [column.name for column in (cursor.description or ())]
         return Row(zip(names, values))
 
     return make

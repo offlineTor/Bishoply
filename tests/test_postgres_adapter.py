@@ -4,6 +4,15 @@ import unittest
 
 class PostgreSQLIntegrationTests(unittest.IsolatedAsyncioTestCase):
     """Runs against a real local/staging PostgreSQL when TEST_DATABASE_URL is set."""
+
+    def test_row_factory_is_safe_for_ddl_cursors(self):
+        from backend.database.db import _compat_row_factory
+
+        class Cursor:
+            description = None
+
+        self.assertTrue(callable(_compat_row_factory(Cursor())))
+
     async def test_postgres_round_trip(self):
         url = os.getenv("TEST_DATABASE_URL")
         if not url:
