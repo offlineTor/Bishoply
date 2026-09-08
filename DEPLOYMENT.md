@@ -20,6 +20,13 @@ The image installs Debian's Stockfish package and sets
 `STOCKFISH_PATH=/usr/games/stockfish`. The application also accepts an explicit
 `STOCKFISH_PATH` override, but no macOS path is used in the container.
 
+The FastAPI lifespan starts one Discord Gateway task in the same Render web
+process when `BISHOPLY_ENV=production`. It shuts that client down during
+application shutdown. Gateway failures are logged and do not terminate the API.
+Set `DISCORD_BOT_TOKEN` as a Render server-side secret. The local `start.sh`
+continues to run the standalone bot only in development, so reloads and tests
+do not create duplicate Gateway clients.
+
 Set these Render environment variables through Render's secret configuration,
 never in the repository:
 

@@ -23,10 +23,10 @@ else
     echo "Backend source missing. Skipping backend."
   fi
 
-  if [ -f "bot.py" ]; then
+  if [ -f "bot.py" ] && [ "${BISHOPLY_BOT_IN_APP:-false}" != "true" ] && [ "${BISHOPLY_ENV:-development}" != "production" ]; then
     nohup python3 bot.py > logs/bot.log 2>&1 &
     echo $! > pids/bot.pid
-    echo "Bot started."
+    echo "Bot started standalone."
   else
     echo "Bot source missing. Skipping bot."
   fi

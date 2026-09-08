@@ -49,6 +49,7 @@ if ENVIRONMENT == "production":
         "DATABASE_URL": os.getenv("DATABASE_URL"),
         "BISHOPLY_ALLOWED_ORIGINS": os.getenv("BISHOPLY_ALLOWED_ORIGINS"),
         "BISHOPLY_FRONTEND_ORIGIN": os.getenv("BISHOPLY_FRONTEND_ORIGIN"),
+        "DISCORD_BOT_TOKEN": os.getenv("DISCORD_BOT_TOKEN"),
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
@@ -140,6 +141,16 @@ async def startup():
     await initialize_practice()
     await initialize_analysis()
     await matchmaking.initialize()
+    if ENVIRONMENT == "production" or os.getenv("BISHOPLY_BOT_IN_APP", "false").lower() == "true":
+        from bot import start_bot
+        await start_bot()
+
+
+@app.on_event("shutdown")
+async def shutdown():
+    if ENVIRONMENT == "production" or os.getenv("BISHOPLY_BOT_IN_APP", "false").lower() == "true":
+        from bot import stop_bot
+        await stop_bot()
 
 
 @app.get("/health")

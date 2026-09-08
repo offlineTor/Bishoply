@@ -1,32 +1,76 @@
+"""Discord bot lifecycle shared by Render web process and local launcher."""
+from __future__ import annotations
+
+import asyncio
+import logging
 import os
+from contextlib import suppress
 
 import discord
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
-TOKEN = os.getenv("DISCORD_TOKEN")
-
-if not TOKEN:
-    raise RuntimeError("DISCORD_TOKEN is missing from .env")
+log = logging.getLogger("bishoply.discord")
+client: discord.Client | None = None
+_task: asyncio.Task | None = None
 
 
-intents = discord.Intents.default()
-
-client = discord.Client(intents=intents)
-
-
-@client.event
-async def on_ready():
-    print("")
-    print("========================================")
-    print("Bishoply bot is online.")
-    print(f"Logged in as: {client.user}")
-    print(f"Discord ID: {client.user.id}")
-    print(f"Connected servers: {len(client.guilds)}")
-    print("========================================")
-    print("")
+def _token() -> str | None:
+    return os.getenv("DISCORD_BOT_TOKEN") or os.getenv("DISCORD_TOKEN")
 
 
-client.run(TOKEN)
+def _build_client() -> discord.Client:
+    instance = discord.Client(intents=discord.Intents.default())
+
+    @instance.event
+    async def on_ready():
+        log.info("Discord bot connected as %s (%s guilds)", instance.user, len(instance.guilds))
+
+    return instance
+
+
+async def start_bot() -> asyncio.Task | None:
+    """Start exactly one non-blocking Gateway task for this process."""
+    global client, _task
+    if _task and not _task.done():
+        return _task
+    token = _token()
+    if not token:
+        log.error("DISCORD_BOT_TOKEN is missing; bot integration is disabled")
+        return None
+    if client is None or client.is_closed():
+        client = _build_client()
+
+    async def run():
+        try:
+            await client.start(token)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            log.exception("Discord Gateway connection failed; API will continue running")
+
+    _task = asyncio.create_task(run(), name="bishoply-discord-gateway")
+    return _task
+
+
+async def stop_bot() -> None:
+    global _task
+    if client is not None and not client.is_closed():
+        with suppress(Exception):
+            await client.close()
+    if _task and not _task.done():
+        _task.cancel()
+        with suppress(asyncio.CancelledError):
+            await _task
+    _task = None
+
+
+def run_standalone() -> None:
+    token = _token()
+    if not token:
+        raise RuntimeError("DISCORD_BOT_TOKEN is missing")
+    _build_client().run(token)
+
+
+if __name__ == "__main__":
+    run_standalone()
