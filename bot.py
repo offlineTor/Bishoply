@@ -24,7 +24,7 @@ def _build_client() -> discord.Client:
 
     @instance.event
     async def on_ready():
-        log.info("Discord bot connected as %s (%s guilds)", instance.user, len(instance.guilds))
+        log.info("Bishoply Discord bot ready: %s (%s guilds)", instance.user, len(instance.guilds))
 
     return instance
 
@@ -38,6 +38,7 @@ async def start_bot() -> asyncio.Task | None:
     if not token:
         log.error("DISCORD_BOT_TOKEN is missing; bot integration is disabled")
         return None
+    log.info("Starting Bishoply Discord Gateway")
     if client is None or client.is_closed():
         client = _build_client()
 
@@ -46,10 +47,20 @@ async def start_bot() -> asyncio.Task | None:
             await client.start(token)
         except asyncio.CancelledError:
             raise
-        except Exception:
-            log.exception("Discord Gateway connection failed; API will continue running")
+        except Exception as error:
+            log.error("Discord Gateway connection failed (%s); API will continue running", type(error).__name__)
 
     _task = asyncio.create_task(run(), name="bishoply-discord-gateway")
+    log.info("Discord Gateway task created")
+
+    def report_unexpected_failure(task: asyncio.Task) -> None:
+        if task.cancelled():
+            return
+        error = task.exception()
+        if error is not None:
+            log.error("Discord Gateway task stopped: %s", type(error).__name__)
+
+    _task.add_done_callback(report_unexpected_failure)
     return _task
 
 
