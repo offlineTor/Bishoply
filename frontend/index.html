@@ -18,6 +18,17 @@
     <strong>Bishoply</strong>
     <div class="app-splash-dots" aria-hidden="true"><span>·</span><span>·</span><span>·</span></div>
   </div>
+  <section id="web-auth-screen" class="web-auth-screen" hidden>
+    <div class="web-auth-card">
+      <div class="brand-mark">♝</div>
+      <h2>Welcome to Bishoply</h2>
+      <p>Sign in to save your profile, games, and progress.</p>
+      <button class="gold-button full" data-auth-provider="google" type="button">Continue with Google</button>
+      <button class="dark-button full" data-auth-provider="apple" type="button">Continue with Apple</button>
+      <button class="dark-button full" data-auth-provider="discord" type="button">Continue with Discord</button>
+      <small><a href="#">Terms</a> · <a href="#">Privacy</a></small>
+    </div>
+  </section>
   <main class="shell">
     <aside class="sidebar">
       <div class="brand-block">
@@ -279,6 +290,10 @@
 
         <div id="profile-page-card" class="profile-page-card">
           Profile loading...
+        </div>
+        <div class="profile-account-actions">
+          <button id="account-logout-button" class="dark-button" type="button">Sign out</button>
+          <div id="account-connections" class="empty-mini" hidden></div>
         </div>
       </section>
 

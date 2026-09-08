@@ -166,7 +166,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    discord_id BIGINT NOT NULL UNIQUE,
+    discord_id BIGINT UNIQUE,
     username TEXT NOT NULL,
     display_name TEXT,
     avatar_url TEXT,
@@ -325,6 +325,31 @@ CREATE TABLE IF NOT EXISTS external_rating_snapshots (
         REFERENCES external_chess_accounts(id)
         ON DELETE CASCADE
 );
+
+CREATE TABLE IF NOT EXISTS auth_identities (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL CHECK(provider IN ('discord','google','apple')),
+    subject TEXT NOT NULL,
+    provider_metadata TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    last_login_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, subject)
+);
+
+CREATE INDEX IF NOT EXISTS idx_auth_identity_user ON auth_identities(user_id);
+
+CREATE TABLE IF NOT EXISTS web_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    csrf_hash TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    expires_at TIMESTAMP NOT NULL,
+    revoked_at TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_web_sessions_token ON web_sessions(token_hash);
 
 CREATE TABLE IF NOT EXISTS competitive_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -760,6 +785,9 @@ async def initialize_database():
     try:
         await db.executescript(BASE_SCHEMA)
         await db.commit()
+        if using_postgres():
+            await db.execute("ALTER TABLE users ALTER COLUMN discord_id DROP NOT NULL")
+            await db.commit()
 
         await run_column_migrations(
             db,
@@ -776,6 +804,9 @@ async def initialize_database():
         await db.executescript(
             POST_MIGRATION_SCHEMA
         )
+        # Backfill the canonical Discord provider identity for every existing
+        # Bishoply user. This is additive and idempotent.
+        await db.execute("INSERT OR IGNORE INTO auth_identities(user_id,provider,subject) SELECT id,'discord',CAST(discord_id AS TEXT) FROM users WHERE discord_id IS NOT NULL")
 
         await db.execute(
             "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"

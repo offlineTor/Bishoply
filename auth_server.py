@@ -21,6 +21,7 @@ from backend.api.voice import router as voice_router
 from backend.api.matchmaking import router as matchmaking_router
 from backend.services import matchmaking
 from backend.api.leaderboard import router as leaderboard_router
+from backend.api.accounts import router as accounts_router
 from backend.database.db import (
     connect,
     get_or_create_user,
@@ -55,6 +56,7 @@ if ENVIRONMENT == "production":
         "BISHOPLY_ALLOWED_ORIGINS": os.getenv("BISHOPLY_ALLOWED_ORIGINS"),
         "BISHOPLY_FRONTEND_ORIGIN": os.getenv("BISHOPLY_FRONTEND_ORIGIN"),
         "DISCORD_BOT_TOKEN": os.getenv("DISCORD_BOT_TOKEN"),
+        "SESSION_SECRET": os.getenv("SESSION_SECRET"),
     }
     missing = [name for name, value in required.items() if not value]
     if missing:
@@ -77,8 +79,8 @@ origin_default = "" if is_production() else "http://localhost:5173,http://127.0.
 allowed_origins = [origin.strip() for origin in (configured_origins or origin_default).split(",")
                    if origin.strip() and origin.strip() != "*"]
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins,
-                   allow_credentials=False, allow_methods=["GET", "POST", "OPTIONS"],
-                   allow_headers=["Authorization", "Content-Type", "X-Practice-Key"])
+                   allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS"],
+                   allow_headers=["Authorization", "Content-Type", "X-Practice-Key", "X-CSRF-Token"])
 
 _limiter = SharedRateLimiter()
 
@@ -133,6 +135,7 @@ app.include_router(
 app.include_router(voice_router)
 app.include_router(matchmaking_router)
 app.include_router(leaderboard_router)
+app.include_router(accounts_router)
 
 
 class ExchangeRequest(BaseModel):
@@ -304,6 +307,9 @@ async def exchange_discord_code(
         display_name=display_name,
         avatar_url=avatar_url,
     )
+    # Keep Activity Discord auth linked to the canonical account identity.
+    from backend.accounts import resolve as resolve_account_identity
+    await resolve_account_identity("discord", str(discord_id), discord_user)
 
     return {
         "access_token": access_token,

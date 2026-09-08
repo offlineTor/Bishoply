@@ -1857,6 +1857,13 @@ code {
 .review-technical summary { cursor:pointer; list-style:none; }
 .review-technical summary::-webkit-details-marker { display:none; }
 .review-technical pre,.review-technical p { margin-top:10px; letter-spacing:0; }
+.web-auth-screen { position:fixed; inset:0; z-index:40; display:grid; place-items:center; padding:24px; background:rgba(10,10,9,.96); }
+.web-auth-screen[hidden] { display:none; }
+.web-auth-card { width:min(380px,100%); display:grid; gap:12px; padding:30px; text-align:center; border:1px solid rgba(214,176,85,.35); border-radius:18px; background:linear-gradient(145deg,#1b1a16,#11110f); box-shadow:0 24px 80px rgba(0,0,0,.45); }
+.web-auth-card .brand-mark { margin:auto; font-size:38px; color:#d9bd73; }
+.web-auth-card h2 { margin:0; color:#f3e8c9; }
+.web-auth-card p { margin:0 0 8px; color:#aaa79b; }
+.web-auth-card small,.web-auth-card a { color:#8e8a7f; }
 @keyframes bishoplyBadgeIn { from { opacity:0; transform:translateY(3px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .bishoply-classification-badge { animation:none; } }
 @media(max-width: 900px) {

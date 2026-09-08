@@ -1,10 +1,11 @@
 """Practice routes never accept arbitrary FENs or mutate multiplayer games."""
 from typing import Literal
-from fastapi import APIRouter, Header, Query, Depends, HTTPException
+from fastapi import APIRouter, Header, Query, Depends, HTTPException, Request as HttpRequest
 from pydantic import BaseModel, ConfigDict, Field
 from backend.practice import config, service
 from backend.analysis.service import get_review
 from backend.practice.auth import discord_identity
+from backend import accounts
 
 router = APIRouter(prefix='/api/practice', tags=['unrated practice'])
 
@@ -14,7 +15,7 @@ class Request(BaseModel):
 
 
 class CreateRequest(Request):
-    discord_id: int = Field(gt=0)
+    discord_id: int | None = Field(default=None, gt=0)
     bot_id: str = Field(min_length=1,max_length=32)
     player_color: Literal['white','black'] = 'white'
 
@@ -31,6 +32,22 @@ class HintRequest(PositionRequest):
     stage: int = Field(ge=1,le=3)
 
 
+async def practice_owner(request: HttpRequest, authorization: str | None = Header(None)):
+    """Resolve Discord bearer identity or the canonical web session.
+
+    The small dependency keeps the historical Discord dependency override used
+    by the Practice test harness while allowing browser sessions to use the
+    same route without a fabricated Discord id.
+    """
+    if authorization:
+        return await discord_identity(authorization)
+    override = request.app.dependency_overrides.get(discord_identity)
+    if override is not None:
+        value = override()
+        return await value if hasattr(value, "__await__") else value
+    return None
+
+
 @router.get('/bots')
 async def list_bots():
     return {'strength_label':config.LABEL,'calibration_version':config.VERSION,
@@ -38,10 +55,18 @@ async def list_bots():
 
 
 @router.post('/games',status_code=201)
-async def create_game(payload: CreateRequest, owner_id: int = Depends(discord_identity)):
-    if payload.discord_id != owner_id:
-        raise HTTPException(403,'Discord identity does not match the requested player')
-    return await service.create(payload.discord_id,payload.bot_id,payload.player_color)
+async def create_game(payload: CreateRequest, request: HttpRequest, authorization: str | None = Header(None)):
+    owner_id = await practice_owner(request, authorization)
+    if owner_id is not None:
+        if payload.discord_id != owner_id:
+            raise HTTPException(403,'Discord identity does not match the requested player')
+        return await service.create(owner_id, payload.bot_id, payload.player_color)
+    if payload.discord_id is not None:
+        # A browser session is identified by its HttpOnly session cookie; a
+        # client-supplied Discord id is never accepted as a substitute.
+        raise HTTPException(422, 'Authenticate with Bishoply before creating Practice')
+    user_id = await accounts.session_user(request)
+    return await service.create(None, payload.bot_id, payload.player_color, user_id=user_id)
 
 
 @router.get('/games/{game_id}')

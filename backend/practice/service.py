@@ -23,16 +23,16 @@ def check_turn(game, board, ply, actor):
         raise HTTPException(409,'Not this actor’s turn')
 
 
-async def create(discord_id, bot_id, color):
+async def create(discord_id, bot_id, color, user_id=None):
     if bot_id not in C.BOTS or color not in ('white','black'):
         raise HTTPException(422,'Unknown bot or color')
     db=await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
-        user=await (await db.execute('SELECT id FROM users WHERE discord_id=?',(discord_id,))).fetchone()
+        user=await (await db.execute('SELECT id FROM users WHERE id=?' if user_id else 'SELECT id FROM users WHERE discord_id=?',(user_id if user_id else discord_id,))).fetchone()
         if user is None:
             raise HTTPException(404,'Bishoply user not found')
-        count=await (await db.execute("SELECT COUNT(*) FROM practice_games WHERE owner_discord_id=? AND status='active'",(int(discord_id),))).fetchone()
+        count=await (await db.execute("SELECT COUNT(*) FROM practice_games WHERE (owner_user_id=? OR owner_discord_id=?) AND status='active'",(user['id'], int(discord_id) if discord_id is not None else None))).fetchone()
         if count[0]>=10:
             raise HTTPException(429,'Finish an existing Practice game before creating another')
         public_id='practice_'+uuid.uuid4().hex
@@ -44,9 +44,9 @@ async def create(discord_id, bot_id, color):
         bot=C.BOTS[bot_id].public()
         bot_config={field: getattr(C.BOTS[bot_id], field)
                     for field in C.Bot.__dataclass_fields__}
-        await db.execute('''INSERT INTO practice_games(public_id,owner_discord_id,access_hash,player_color,
+        await db.execute('''INSERT INTO practice_games(public_id,owner_discord_id,owner_user_id,access_hash,player_color,
             bot_id,bot_strength,bot_personality,bot_config,starting_fen,current_fen,status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,int(discord_id),storage.key_hash(key),color,
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,int(discord_id) if discord_id is not None else None,user['id'],storage.key_hash(key),color,
             bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot_config),chess.STARTING_FEN,chess.STARTING_FEN))
         await db.commit()
         game=await storage.require_game(db,public_id,key)

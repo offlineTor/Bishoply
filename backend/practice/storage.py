@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS practice_games (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
  public_id TEXT NOT NULL UNIQUE,
  mode TEXT NOT NULL DEFAULT 'practice' CHECK(mode='practice'),
- owner_discord_id BIGINT NOT NULL,
+ owner_discord_id BIGINT,
+ owner_user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
  access_hash TEXT NOT NULL,
  player_color TEXT NOT NULL CHECK(player_color IN ('white','black')),
  bot_id TEXT NOT NULL,
@@ -54,6 +55,7 @@ CREATE TABLE IF NOT EXISTS practice_moves (
  UNIQUE(game_id,ply)
 );
 CREATE INDEX IF NOT EXISTS practice_history ON practice_games(owner_discord_id,created_at);
+CREATE INDEX IF NOT EXISTS practice_history_user ON practice_games(owner_user_id,created_at);
 CREATE TABLE IF NOT EXISTS practice_coach_context (
  game_id INTEGER PRIMARY KEY REFERENCES practice_games(id) ON DELETE CASCADE,
  last_ply INTEGER NOT NULL DEFAULT 0,
@@ -75,6 +77,10 @@ async def initialize():
         columns = await database.get_table_columns(db, "practice_games")
         if "revision" not in columns:
             await db.execute("ALTER TABLE practice_games ADD COLUMN revision INTEGER NOT NULL DEFAULT 0")
+        if "owner_user_id" not in columns:
+            await db.execute("ALTER TABLE practice_games ADD COLUMN owner_user_id INTEGER")
+        if database.using_postgres():
+            await db.execute("ALTER TABLE practice_games ALTER COLUMN owner_discord_id DROP NOT NULL")
         await db.execute("UPDATE practice_games SET operation_id=NULL,bot_error='Operation interrupted; retry' WHERE operation_id IS NOT NULL")
         await db.commit()
     except Exception:

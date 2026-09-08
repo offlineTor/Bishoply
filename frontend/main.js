@@ -42,6 +42,7 @@ const sdkCheck = $("#sdk-check");
 const apiCheck = $("#api-check");
 const profileCheck = $("#profile-check");
 const appSplash = $("#app-splash");
+const webAuthScreen = $("#web-auth-screen");
 
 const homeRating = $("#home-rating");
 const homeRank = $("#home-rank");
@@ -98,6 +99,8 @@ const moveButton = $("#move-button");
 const refreshHistoryButton = $("#refresh-history-button");
 const historyList = $("#history-list");
 const profilePageCard = $("#profile-page-card");
+const accountLogoutButton = $("#account-logout-button");
+const accountConnections = $("#account-connections");
 const leaderboardList = $("#leaderboard-list");
 const leaderboardRatingTab = $("#leaderboard-rating-tab");
 const leaderboardSrTab = $("#leaderboard-sr-tab");
@@ -106,6 +109,7 @@ let leaderboardKind = "rating";
 
 let currentProfile = null;
 let discordAccessToken = null;
+let webSessionAuthenticated = false;
 let currentGame = null;
 let reviewPosition = null;
 let reviewFlipped = false;
@@ -385,11 +389,11 @@ function setControlsEnabled(enabled) {
 async function apiFetch(path, options = {}) {
   const headers = new Headers(options.headers || {});
   const normalizedPath = typeof path === "string" && path.startsWith("/") ? path : "";
-  const publicPath = normalizedPath === "/health" || normalizedPath === "/api/health" || normalizedPath === "/api/auth/discord" || normalizedPath === "/api/practice/bots";
+  const publicPath = normalizedPath === "/health" || normalizedPath === "/api/health" || normalizedPath === "/api/auth/discord" || normalizedPath === "/api/auth/session" || normalizedPath === "/api/practice/bots" || /^\/api\/auth\/(google|apple|discord)\/start$/.test(normalizedPath);
   // FastAPI protects these routes with a required Authorization header. Do
   // not send a guaranteed-422 request while Discord authentication is still
   // completing; surface the normal safe auth state instead.
-  if (normalizedPath.startsWith("/api/") && !publicPath && !discordAccessToken) {
+  if (normalizedPath.startsWith("/api/") && !publicPath && !discordAccessToken && !webSessionAuthenticated) {
     throw new ApiError("Discord authentication is still loading. Please try again shortly.", "unauthorized", 401);
   }
   if (discordAccessToken && !headers.has("Authorization")) {
@@ -400,7 +404,7 @@ async function apiFetch(path, options = {}) {
   let response;
   try {
     const target = backendRequestUrl(path);
-    response = await fetch(target, { ...options, headers, signal: options.signal || controller.signal });
+    response = await fetch(target, { ...options, credentials: options.credentials || "include", headers, signal: options.signal || controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") throw new ApiError("Request timed out. Please try again.", "timeout", 0);
     throw new ApiError("Connection lost. Check your connection and try again.", "network_error", 0);
@@ -3455,8 +3459,8 @@ async function handlePracticeSquareClick(square) {
 }
 
 async function createPracticeGame(botId, color = practiceChoice.player_color) {
-  const ready = appReady && Boolean(currentProfile?.discord_id);
-  practiceDebug("readiness", { ready, app_ready: appReady, has_profile: Boolean(currentProfile?.discord_id) });
+  const ready = appReady && Boolean(currentProfile);
+  practiceDebug("readiness", { ready, app_ready: appReady, has_profile: Boolean(currentProfile), web_session: webSessionAuthenticated });
   if (!requireReady()) return;
   if (practiceCreateBusy) return;
   if (!botId) {
@@ -3483,10 +3487,10 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${discordAccessToken}`,
+      ...(discordAccessToken ? { Authorization: `Bearer ${discordAccessToken}` } : {}),
     },
     body: JSON.stringify({
-      discord_id: currentProfile.discord_id,
+      ...(currentProfile?.discord_id ? { discord_id: currentProfile.discord_id } : {}),
       bot_id: botId,
       player_color: practiceChoice.player_color,
       }),
@@ -3689,6 +3693,17 @@ async function refreshProfile() {
   renderProfile(
     currentProfile
   );
+  await loadAccountConnections();
+}
+
+async function loadAccountConnections() {
+  if (!accountConnections || !webSessionAuthenticated) return;
+  try {
+    const data = await apiFetch("/api/auth/connections");
+    const connected = new Set((data.connections || []).map((item) => item.provider));
+    accountConnections.hidden = false;
+    accountConnections.innerHTML = `<strong>Connections</strong><span>${["discord", "google", "apple"].map((provider) => `${provider[0].toUpperCase()}${provider.slice(1)} · ${connected.has(provider) ? "Connected" : "Not connected"}`).join("<br>")}</span>`;
+  } catch { accountConnections.hidden = true; }
 }
 
 
@@ -4141,6 +4156,32 @@ window.addEventListener("online", () => setStatus("Connection restored."));
 
 
 function bindEvents() {
+  if (accountLogoutButton) accountLogoutButton.addEventListener("click", async () => {
+    const csrf = document.cookie.split("; ").find((item) => item.startsWith("bishoply_csrf="))?.split("=")[1] || "";
+    accountLogoutButton.disabled = true;
+    try {
+      await apiFetch("/api/auth/logout", { method: "POST", headers: csrf ? { "X-CSRF-Token": decodeURIComponent(csrf) } : {} });
+      webSessionAuthenticated = false;
+      currentProfile = null;
+      if (webAuthScreen) webAuthScreen.hidden = false;
+      if (sidebarProfile) sidebarProfile.textContent = "Sign in to view your profile";
+      setStatus("Signed out");
+    } catch (error) { setStatus(error.message || "Sign out failed."); }
+    finally { accountLogoutButton.disabled = false; }
+  });
+  document.querySelectorAll("[data-auth-provider]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const provider = button.dataset.authProvider;
+      button.disabled = true;
+      try {
+        const data = await apiFetch(`/api/auth/${provider}/start`);
+        window.location.assign(data.authorization_url);
+      } catch (error) {
+        setStatus(error.message || "Sign-in is currently unavailable.");
+        button.disabled = false;
+      }
+    });
+  });
   $$(".nav-item")
     .forEach(
       (button) => {
@@ -4434,14 +4475,24 @@ async function setupBishoply() {
     await checkBackend();
 
     if (!isDiscordActivity) {
-      // Standalone browser mode is intentionally unauthenticated: no fake
-      // Discord identity or access token is created. Public shell content can
-      // still load, while protected actions use the normal auth error path.
       if (sdkCheck) setCheck(sdkCheck, "Browser mode");
-      appReady = true;
-      setControlsEnabled(true);
+      let session = null;
+      try { session = await apiFetch("/api/auth/session"); } catch (error) {
+        if (error?.status !== 401) throw error;
+      }
+      webSessionAuthenticated = Boolean(session?.authenticated);
+      currentProfile = session?.profile || null;
+      appReady = Boolean(currentProfile);
+      setControlsEnabled(appReady);
       setConnectionLabel("Connected");
-      setStatus("Bishoply is ready in browser mode.");
+      setStatus(appReady ? "Bishoply is ready." : "Signed out");
+      if (webAuthScreen) webAuthScreen.hidden = appReady;
+      if (profileCheck) setCheck(profileCheck, appReady ? "Profile loaded" : "Signed out");
+      if (appReady) {
+        renderProfile(currentProfile);
+        await loadAccountConnections();
+      }
+      if (sidebarProfile && !appReady) sidebarProfile.textContent = "Sign in to view your profile";
       if (appSplash) {
         appSplash.classList.add("is-ready");
         window.setTimeout(() => appSplash.remove(), 180);
