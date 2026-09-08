@@ -33,6 +33,7 @@ class MoveRequest(PositionRequest):
     # This prevents stale Activity bundles from producing an opaque 422 while
     # preserving one canonical service contract.
     uci: str | None = Field(default=None, pattern=r'^[a-h][1-8][a-h][1-8][qrbn]?$')
+    expected_ply: int | None = Field(default=None, ge=0, le=config.MAX_HISTORY_PLIES)
 
     @model_validator(mode='after')
     def normalize_move(self):

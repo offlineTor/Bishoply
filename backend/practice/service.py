@@ -90,6 +90,8 @@ async def player_move(public_id,key,uci,ply,owner_user_id=None,owner_discord_id=
         await db.execute('BEGIN IMMEDIATE')
         game=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
         board,_=await storage.load_board(db,game)
+        if ply is None:
+            ply = int(game['ply'])
         check_turn(game,board,ply,'player')
         if game['operation_id']:
             raise HTTPException(409,'An engine operation is already running')
