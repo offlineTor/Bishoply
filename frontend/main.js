@@ -20,10 +20,13 @@ const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "").replace(/\/$/, "
 function backendRequestUrl(path) {
   if (/^https?:\/\//i.test(path)) return path;
   const normalized = path.startsWith("/") ? path : `/${path}`;
-  // Discord's Activity mapping proxies /api/* to the backend root. Keep
-  // existing API paths intact and prefix non-API routes such as /health.
-  const activityPath = normalized === "/api" || normalized.startsWith("/api/")
-    ? normalized
+  // Discord's Activity mapping uses /api as a proxy prefix and strips it
+  // before forwarding. The backend's application routes retain their /api
+  // prefix, so an app request such as /api/auth/discord must be sent through
+  // the proxy as /api/api/auth/discord. Health is the one backend route at
+  // the root, so /health is sent as /api/health.
+  const activityPath = normalized === "/health" || normalized === "/api/health"
+    ? "/api/health"
     : `/api${normalized}`;
   return isDiscordActivity ? activityPath : `${API_BASE_URL}${normalized}`;
 }
