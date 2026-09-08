@@ -89,7 +89,9 @@ def style_score(board, move, style, pv=()):
     own_king=child.king(color)
     danger=sum(child.is_attacked_by(not color,sq) for sq in chess.SquareSet(chess.BB_KING_ATTACKS[own_king]))
     if style=='development': return 3*developed+center*.3
-    if style=='knight': return (4 if piece.piece_type==chess.KNIGHT and len(attacked)>=2 else 0)+check+center*.2
+    if style=='knight':
+        target_value = sum(PIECE_VALUES.get(p.piece_type, 0) for p in attacked)
+        return (min(7, 1.2 * len(attacked) + target_value / 3) if piece.piece_type == chess.KNIGHT and len(attacked) >= 2 else 0) + check + center*.2
     if style=='attack': return 3*check+capture+max(0,advancement)*.4+center*.3
     if style=='safety': return 4*board.is_castling(move)-danger*.4+(not child.is_attacked_by(not color,move.to_square))*.5
     if style=='tactical': return 3*check+2*capture+sum('x' in san or '+' in san for san in pv[:4])*.3
@@ -105,7 +107,7 @@ def choose_candidate(board, bot, scored, base_move, seed, endgame_factor=1):
     best=scored[0]
     cap=bot.max_cp_loss
     outcome_cap=bot.max_outcome_loss
-    probability=bot.variety_probability
+    probability=min(1.0, bot.variety_probability + bot.mistake_frequency)
     if bot.bot_id=='endgame':
         cap=round(cap*max(.15,endgame_factor)); outcome_cap=round(outcome_cap*max(.15,endgame_factor))
         probability*=endgame_factor
@@ -130,8 +132,9 @@ def choose_candidate(board, bot, scored, base_move, seed, endgame_factor=1):
     for index,c in enumerate(candidates):
         score=style_score(board,chess.Move.from_uci(c['move']),bot.style,c.get('pv_san',()))
         # Low bots admit lower-ranked plausible candidates; stronger bots concentrate near PV1.
-        temperature=3.0 if bot.bot_id=='scout' else 2.0 if bot.estimated_strength<=1200 else .8
-        weights.append(math.exp(-index/temperature+min(3,max(-3,score))*.6))
+        temperature=bot.selection_temperature
+        weights.append(math.exp(-index/temperature + min(3, max(-3, score))
+                             * (.35 + .65 * bot.tactical_awareness)))
     return rng.choices(candidates,weights=weights,k=1)[0],candidates
 
 
@@ -153,8 +156,16 @@ async def bot_move(board, bot_id, seed, snapshot=None):
         search_seconds = bot.search_seconds
         search_depth = bot.search_depth
         if bot_id == 'endgame':
-            search_seconds *= max(.75, 1.25 - strength['endgame_factor'] * .25)
-            search_depth = (search_depth or 12) + round(3 * (1 - strength['endgame_factor']))
+            # Endgame is intentionally a normal club-strength player while
+            # queens and most material remain, then gains a deeper/tighter
+            # conversion policy once the position is genuinely reduced.
+            reduced = strength['endgame_factor'] < .65
+            if reduced:
+                search_seconds *= max(.9, 1.25 - strength['endgame_factor'] * .25)
+                search_depth = (search_depth or 12) + round(3 * (1 - strength['endgame_factor']))
+            else:
+                search_seconds = min(search_seconds, .34)
+                search_depth = min(search_depth or 12, 11)
         infos=await engine.analyse(
             board,
             chess.engine.Limit(time=search_seconds, depth=search_depth),
@@ -168,14 +179,18 @@ async def bot_move(board, bot_id, seed, snapshot=None):
             scored.append({**outcome(info,board.turn),'move':info['pv'][0].uci(),'pv_san':san,
                            'depth':info.get('depth'),'nodes':info.get('nodes'),'time':info.get('time')})
         scored.sort(key=lambda c:(c['outcome_units'],c['cp'] if c['cp'] is not None else (100000 if c['mate']>0 else -100000)),reverse=True)
+        for rank, candidate in enumerate(scored, 1):
+            candidate['rank'] = rank
         log.info("Bishoply Practice candidates generated bot=%s count=%s", bot_id, len(scored))
         if not scored:
             raise RuntimeError('No legal candidates returned by Stockfish')
         base_move = scored[0]['move']
         chosen,allowed=choose_candidate(board,bot,scored,base_move,seed,strength['endgame_factor'])
         return {'uci':chosen['move'],'engine':engine.id,'calibration_version':C.VERSION,
-                'strength_control':strength,'assessment_settings':{'depth':C.ASSESS_DEPTH,'time':C.ASSESS_SECONDS},
-                'base_move':base_move,'allowed_candidates':allowed,'selected':chosen}
+                'strength_control':strength,'phase_policy':'reduced-material precision' if bot_id == 'endgame' and strength['endgame_factor'] < .65 else 'general play',
+                'assessment_settings':{'depth':C.ASSESS_DEPTH,'time':C.ASSESS_SECONDS},
+                'base_move':base_move,'selected_rank':chosen.get('rank', 1),
+                'allowed_candidates':allowed,'selected':chosen}
     async def pooled():
         async with await _pool.acquire() as (provider, engine):
             return await operation(engine)

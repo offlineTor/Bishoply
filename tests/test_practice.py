@@ -282,6 +282,16 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
 
 
 class BotTests(unittest.IsolatedAsyncioTestCase):
+    async def test_v2_profiles_have_ordered_strength_controls(self):
+        profiles = list(config.ROSTER)
+        self.assertEqual([p.estimated_strength for p in profiles], list(range(600, 2401, 200)))
+        self.assertEqual(sorted(p.search_seconds for p in profiles), [p.search_seconds for p in profiles])
+        self.assertEqual(sorted(p.search_depth for p in profiles), [p.search_depth for p in profiles])
+        self.assertEqual(sorted((p.max_outcome_loss for p in profiles), reverse=True),
+                         [p.max_outcome_loss for p in profiles])
+        self.assertEqual(profiles[-1].mistake_frequency, 0)
+        self.assertEqual(profiles[-1].selection_temperature, .35)
+
     async def test_all_configs_and_real_legal_moves_both_colors(self):
         self.assertEqual([b.estimated_strength for b in config.ROSTER],list(range(600,2401,200)))
         for bot in config.ROSTER:

@@ -1,5 +1,6 @@
 """Stockfish provider adapter used only by unrated Practice."""
 import chess
+import chess.engine
 from .engine_provider import EngineProvider
 
 

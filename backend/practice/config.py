@@ -4,7 +4,7 @@ All style/weakening choices are constrained to scored legal candidates.
 """
 from dataclasses import asdict, dataclass
 
-VERSION = 'bishoply-bots-v1-experimental'
+VERSION = 'bishoply-bots-v2-calibrated'
 LABEL = 'Estimated Bot Strength'
 JOB_TIMEOUT = 8.0
 MAX_ENGINE_JOBS = 2
@@ -33,6 +33,8 @@ class Bot:
     search_seconds: float = .2
     search_depth: int | None = None
     tactical_awareness: float = .5
+    selection_temperature: float = 1.0
+    mistake_frequency: float = 0.0
 
     def public(self):
         # This is a public roster contract. Engine tuning, weakening
@@ -45,15 +47,17 @@ class Bot:
 
 
 ROSTER = (
-    Bot('scout','Scout',600,'Beginner','Forgiving; reasonable lower-ranked moves',8,220,300,.80,'forgiving',.12,8,.25),
-    Bot('tempo','Tempo',800,'Casual','Natural development; occasional tactical misses',7,180,260,.65,'development',.16,9,.35),
-    Bot('fork','Fork',1000,'Developing','Knight tactics, with bounded inconsistency',6,150,220,.55,'knight',.19,10,.45),
-    Bot('gambit','Gambit',1200,'Club Player','Active play and attacking chances',6,120,180,.50,'attack',.23,11,.55),
-    Bot('castle','Castle',1400,'Strong Club','King safety and positional restraint',5,90,140,.40,'safety',.28,12,.62),
-    Bot('tactician','Tactician',1600,'Tournament Player','Checks, captures and tactical lines',5,70,100,.35,'tactical',.34,13,.75),
-    Bot('endgame','Endgame',1800,'Expert','Increasing precision as material decreases',4,60,80,.30,'technical',.40,14,.82),
-    Bot('vanguard','Vanguard',2000,'Advanced / Master Strength','Balanced strong play',4,40,60,.20,'balanced',.48,15,.88),
-    Bot('maestro','Maestro',2200,'Elite','Strong play with restrained stylistic variety',3,25,40,.15,'positional',.60,16,.93),
-    Bot('crown','Crown',2400,'Grandmaster Strength','Strongest normal Bishoply engine behavior',1,0,0,0,'strongest',.90,18,1.0),
+    # Variety and loss bands are deliberately graduated.  These are practical
+    # Bishoply estimates, not claims of certified Elo.
+    Bot('scout','Scout',600,'Beginner','Forgiving; reasonable lower-ranked moves',8,420,520,.98,'forgiving',.10,7,.20,7.0,.42),
+    Bot('tempo','Tempo',800,'Casual','Natural development; occasional tactical misses',7,250,330,.82,'development',.14,8,.32,4.1,.27),
+    Bot('fork','Fork',1000,'Developing','Knight tactics, with bounded inconsistency',6,195,270,.70,'knight',.18,9,.55,3.2,.21),
+    Bot('gambit','Gambit',1200,'Club Player','Active play and attacking chances',6,155,215,.62,'attack',.22,10,.60,2.6,.17),
+    Bot('castle','Castle',1400,'Strong Club','King safety and positional restraint',5,125,170,.52,'safety',.27,11,.66,2.05,.13),
+    Bot('tactician','Tactician',1600,'Tournament Player','Checks, captures and tactical lines',5,95,130,.43,'tactical',.33,12,.80,1.55,.09),
+    Bot('endgame','Endgame',1800,'Expert','Increasing precision as material decreases',5,180,130,.62,'technical',.40,13,.86,1.8,.12),
+    Bot('vanguard','Vanguard',2000,'Advanced / Master Strength','Balanced strong play',4,100,110,.48,'balanced',.48,14,.90,1.4,.075),
+    Bot('maestro','Maestro',2200,'Elite','Strong play with restrained stylistic variety',3,42,55,.24,'positional',.60,15,.95,.82,.03),
+    Bot('crown','Crown',2400,'Grandmaster Strength','Strongest normal Bishoply engine behavior',2,22,30,.12,'strongest',.90,17,1.0,.35,0),
 )
 BOTS = {bot.bot_id: bot for bot in ROSTER}
