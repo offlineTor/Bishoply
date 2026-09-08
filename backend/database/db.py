@@ -2,7 +2,11 @@ import aiosqlite
 import os
 import re
 from pathlib import Path
-from backend.database.migrations import SCHEMA_VERSION, record_version
+from backend.database.migrations import (
+    DISCORD_ID_MIGRATION_VERSION,
+    SCHEMA_VERSION,
+    record_version,
+)
 
 try:
     from psycopg import AsyncConnection, connect as sync_pg_connect
@@ -160,7 +164,7 @@ PRAGMA foreign_keys = ON;
 
 CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    discord_id INTEGER NOT NULL UNIQUE,
+    discord_id BIGINT NOT NULL UNIQUE,
     username TEXT NOT NULL,
     display_name TEXT,
     avatar_url TEXT,
@@ -787,6 +791,55 @@ async def initialize_database():
 
     finally:
         await db.close()
+
+
+async def migrate_discord_id_columns(db):
+    """Upgrade every persisted Discord snowflake to PostgreSQL BIGINT.
+
+    Existing text columns are validated before conversion so malformed legacy
+    data aborts the migration rather than being silently coerced or lost.
+    SQLite stores INTEGER values as signed 64-bit and does not need a type
+    rewrite; the same schema remains compatible with local development.
+    """
+    if getattr(db, "backend", "sqlite") != "postgres":
+        return
+
+    columns = (
+        ("users", "discord_id"),
+        ("practice_games", "owner_discord_id"),
+        ("matchmaking_queue", "discord_user_id"),
+    )
+    for table, column in columns:
+        type_row = await (
+            await db.execute(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_schema='public' AND table_name=? AND column_name=?",
+                (table, column),
+            )
+        ).fetchone()
+        if not type_row or str(type_row["data_type"]).lower() == "bigint":
+            continue
+
+        # Text-backed legacy columns must contain numeric Discord snowflakes
+        # before PostgreSQL can safely cast them to BIGINT.
+        if str(type_row["data_type"]).lower() in {"text", "character varying", "varchar"}:
+            invalid = await (
+                await db.execute(
+                    f"SELECT COUNT(*) AS count FROM {table} "
+                    f"WHERE {column} IS NULL OR {column} !~ '^[0-9]+$'"
+                )
+            ).fetchone()
+            if invalid and int(invalid["count"] or 0):
+                raise RuntimeError(
+                    f"Cannot migrate {table}.{column}: non-numeric Discord IDs present"
+                )
+
+        await db.execute(
+            f"ALTER TABLE {table} ALTER COLUMN {column} TYPE BIGINT "
+            f"USING {column}::BIGINT"
+        )
+
+    await record_version(db, DISCORD_ID_MIGRATION_VERSION)
 
 
 async def ensure_competitive_profile(

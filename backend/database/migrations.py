@@ -1,6 +1,7 @@
 """Explicit schema version metadata for SQLite and PostgreSQL deployments."""
 
 SCHEMA_VERSION = 1
+DISCORD_ID_MIGRATION_VERSION = 2
 
 
 async def current_version(db):

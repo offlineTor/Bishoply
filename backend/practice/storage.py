@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS practice_games (
  id INTEGER PRIMARY KEY,
  public_id TEXT NOT NULL UNIQUE,
  mode TEXT NOT NULL DEFAULT 'practice' CHECK(mode='practice'),
- owner_discord_id TEXT NOT NULL,
+ owner_discord_id BIGINT NOT NULL,
  access_hash TEXT NOT NULL,
  player_color TEXT NOT NULL CHECK(player_color IN ('white','black')),
  bot_id TEXT NOT NULL,

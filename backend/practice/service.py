@@ -29,7 +29,7 @@ async def create(discord_id, bot_id, color):
         user=await (await db.execute('SELECT id FROM users WHERE discord_id=?',(discord_id,))).fetchone()
         if user is None:
             raise HTTPException(404,'Bishoply user not found')
-        count=await (await db.execute("SELECT COUNT(*) FROM practice_games WHERE owner_discord_id=? AND status='active'",(str(discord_id),))).fetchone()
+        count=await (await db.execute("SELECT COUNT(*) FROM practice_games WHERE owner_discord_id=? AND status='active'",(int(discord_id),))).fetchone()
         if count[0]>=10:
             raise HTTPException(429,'Finish an existing Practice game before creating another')
         public_id='practice_'+uuid.uuid4().hex
@@ -37,7 +37,7 @@ async def create(discord_id, bot_id, color):
         bot=C.BOTS[bot_id].public()
         await db.execute('''INSERT INTO practice_games(public_id,owner_discord_id,access_hash,player_color,
             bot_id,bot_strength,bot_personality,bot_config,starting_fen,current_fen,status)
-            VALUES (?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,str(discord_id),storage.key_hash(key),color,
+            VALUES (?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,int(discord_id),storage.key_hash(key),color,
             bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot),chess.STARTING_FEN,chess.STARTING_FEN))
         await db.commit()
         game=await storage.require_game(db,public_id,key)

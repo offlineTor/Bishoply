@@ -13,7 +13,7 @@ from backend.services.game_service import STARTING_FEN, CURRENT_RATING_MODEL, bu
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS matchmaking_queue (
  id INTEGER PRIMARY KEY AUTOINCREMENT,
- discord_user_id TEXT NOT NULL,
+ discord_user_id BIGINT NOT NULL,
  queue_type TEXT NOT NULL DEFAULT 'duel',
  rating_snapshot REAL NOT NULL,
  joined_at REAL NOT NULL,
@@ -64,11 +64,11 @@ def _opponent(row):
 
 async def _state(db, user_id, now=None):
     now = now or time.time()
-    row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued' ORDER BY id DESC LIMIT 1", (str(user_id),))).fetchone()
+    row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued' ORDER BY id DESC LIMIT 1", (int(user_id),))).fetchone()
     if row:
         age = max(0, int(now - row["joined_at"]))
         return {"status":"queued", "joined_at":datetime.fromtimestamp(row["joined_at"], timezone.utc).isoformat(), "search_seconds":age, "rating_window":_window(age)}
-    row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='matched' ORDER BY id DESC LIMIT 1", (str(user_id),))).fetchone()
+    row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='matched' ORDER BY id DESC LIMIT 1", (int(user_id),))).fetchone()
     if not row:
         active = await (await db.execute("SELECT public_id FROM games WHERE status='active' AND (white_user_id=(SELECT id FROM users WHERE discord_id=?) OR black_user_id=(SELECT id FROM users WHERE discord_id=?)) LIMIT 1", (int(user_id), int(user_id)))).fetchone()
         return {"status":"active_game", "game_id":active["public_id"]} if active else {"status":"idle"}
@@ -91,14 +91,14 @@ async def join(user_id):
         if active:
             await db.commit()
             return {"status":"active_game", "game_id":active["public_id"]}
-        existing = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued'", (str(user_id),))).fetchone()
+        existing = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued'", (int(user_id),))).fetchone()
         if existing: raise HTTPException(409, "You are already finding an opponent")
-        await db.execute("INSERT INTO matchmaking_queue(discord_user_id,rating_snapshot,joined_at,updated_at,status) VALUES (?,?,?,?, 'queued')", (str(user_id), rating, now, now))
-        mine = await (await db.execute("SELECT id FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued'", (str(user_id),))).fetchone()
-        candidate_sql = "SELECT q.*,u.id AS uid,u.display_name,u.username,u.avatar_url FROM matchmaking_queue q JOIN users u ON u.discord_id=CAST(q.discord_user_id AS INTEGER) WHERE q.queue_type='duel' AND q.status='queued' AND q.discord_user_id!=?"
+        await db.execute("INSERT INTO matchmaking_queue(discord_user_id,rating_snapshot,joined_at,updated_at,status) VALUES (?,?,?,?, 'queued')", (int(user_id), rating, now, now))
+        mine = await (await db.execute("SELECT id FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' AND status='queued'", (int(user_id),))).fetchone()
+        candidate_sql = "SELECT q.*,u.id AS uid,u.display_name,u.username,u.avatar_url FROM matchmaking_queue q JOIN users u ON u.discord_id=q.discord_user_id WHERE q.queue_type='duel' AND q.status='queued' AND q.discord_user_id!=?"
         if getattr(db, "backend", "sqlite") == "postgres":
             candidate_sql += " ORDER BY q.joined_at FOR UPDATE SKIP LOCKED"
-        candidate = await (await db.execute(candidate_sql, (str(user_id),))).fetchall()
+        candidate = await (await db.execute(candidate_sql, (int(user_id),))).fetchall()
         eligible = [item for item in candidate if abs(float(item["rating_snapshot"]) - rating) <= max(_window(now-item["joined_at"]), 150)]
         eligible.sort(key=lambda item: (abs(float(item["rating_snapshot"]) - rating), item["joined_at"]))
         chosen = eligible[0] if eligible else None
@@ -126,7 +126,7 @@ async def cancel(user_id):
     db = await connect()
     try:
         await db.execute("BEGIN IMMEDIATE")
-        row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' ORDER BY id DESC LIMIT 1", (str(user_id),))).fetchone()
+        row = await (await db.execute("SELECT * FROM matchmaking_queue WHERE discord_user_id=? AND queue_type='duel' ORDER BY id DESC LIMIT 1", (int(user_id),))).fetchone()
         if row and row["status"] == "queued":
             await db.execute("UPDATE matchmaking_queue SET status='cancelled',updated_at=?,revision=revision+1 WHERE id=? AND status='queued'", (time.time(), row["id"]))
         await db.commit()
