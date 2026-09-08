@@ -110,6 +110,11 @@ async def security_middleware(request: Request, call_next):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
+    logging.getLogger("bishoply.api").warning(
+        "request_validation_failed path=%s fields=%s",
+        request.url.path,
+        [".".join(str(part) for part in error.get("loc", ())) for error in exc.errors()],
+    )
     return JSONResponse(status_code=422, content={"error": "invalid_request", "message": "The request could not be validated."})
 
 
