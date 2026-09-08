@@ -193,6 +193,7 @@ async def bot_move(board, bot_id, seed, snapshot=None):
                 'allowed_candidates':allowed,'selected':chosen}
     async def pooled():
         async with await _pool.acquire() as (provider, engine):
+            log.info("practice_engine_checkout bot=%s", bot_id)
             return await operation(engine)
     return await asyncio.wait_for(pooled(), timeout=C.JOB_TIMEOUT)
 

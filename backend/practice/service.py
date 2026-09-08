@@ -84,6 +84,7 @@ async def append_move(db,game,board,move,actor,metadata=None):
 
 
 async def player_move(public_id,key,uci,ply,owner_user_id=None,owner_discord_id=None):
+    log.info("practice_move_received game=%s ply=%s", public_id, ply)
     db=await database.connect()
     try:
         await db.execute('BEGIN IMMEDIATE')
@@ -103,6 +104,7 @@ async def player_move(public_id,key,uci,ply,owner_user_id=None,owner_discord_id=
     finally:
         await db.close()
     log.info("practice_move game=%s ply=%s", public_id, ply + 1)
+    log.info("practice_move_persisted game=%s ply=%s", public_id, ply + 1)
     return {**await get(public_id,key,owner_user_id,owner_discord_id),'analysis':{'status':'queued','ply':ply+1}}
 
 
@@ -133,6 +135,7 @@ async def release_operation(public_id,operation,error=None):
 
 
 async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=None):
+    log.info("practice_bot_requested game=%s ply=%s", public_id, ply)
     game,board,operation=await claim_operation(public_id,key,ply,'bot',owner_user_id,owner_discord_id)
     claimed_revision = int(game.get('revision', 0))
     error=None

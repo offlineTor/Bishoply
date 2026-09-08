@@ -4,18 +4,19 @@ import { LAUNCH_FEATURES } from "./launch-config.js";
 import { GameResult, formatTermination, isEnded } from "./game-result.js";
 import { GameReview } from "./game-review.js";
 import { classificationUi, classificationBadge } from "./classification-ui.js";
-import { DiscordSDK } from "@discord/embedded-app-sdk";
+import { DiscordSDK } from "./discord/client.js";
+import { createApiTransport } from "./shared/api-transport.js";
+import { isDiscordRuntime } from "./shared/runtime.js";
 
 const CLIENT_ID = "1546225609967935620";
 // The Embedded App SDK requires Discord-injected query parameters at
 // construction time. Direct browser visits do not have them, so defer SDK
 // creation until we have positively identified an Activity context.
-const discordQuery = new URLSearchParams(window.location.search);
-const isDiscordActivity = ["frame_id", "instance_id", "platform"]
-  .every((key) => Boolean(discordQuery.get(key)));
+const isDiscordActivity = isDiscordRuntime;
 let discordSdk = null;
 
 const API_BASE_URL = (import.meta.env?.VITE_API_BASE_URL || "").replace(/\/$/, "");
+const apiTransport = createApiTransport();
 
 function backendRequestUrl(path) {
   if (/^https?:\/\//i.test(path)) return path;
@@ -25,10 +26,7 @@ function backendRequestUrl(path) {
   // prefix, so an app request such as /api/auth/discord must be sent through
   // the proxy as /api/api/auth/discord. Health is the one backend route at
   // the root, so /health is sent as /api/health.
-  const activityPath = normalized === "/health" || normalized === "/api/health"
-    ? "/api/health"
-    : `/api${normalized}`;
-  return isDiscordActivity ? activityPath : `${API_BASE_URL}${normalized}`;
+  return apiTransport.url(normalized);
 }
 
 const $ = (selector) => document.querySelector(selector);
@@ -413,7 +411,7 @@ async function apiFetch(path, options = {}) {
   let response;
   try {
     const target = backendRequestUrl(path);
-    response = await fetch(target, { ...options, credentials: options.credentials || "include", headers, signal: options.signal || controller.signal });
+    response = await fetch(target, { ...options, credentials: options.credentials || apiTransport.credentials(), headers: apiTransport.headers(headers), signal: options.signal || controller.signal });
   } catch (error) {
     if (error?.name === "AbortError") throw new ApiError("Request timed out. Please try again.", "timeout", 0);
     throw new ApiError("Connection lost. Check your connection and try again.", "network_error", 0);
@@ -4621,6 +4619,7 @@ async function setupBishoply() {
       );
 
     discordAccessToken = tokenData.access_token;
+    apiTransport.setToken(discordAccessToken);
 
     const auth =
       await discordSdk.commands.authenticate({
