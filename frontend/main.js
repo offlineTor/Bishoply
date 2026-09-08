@@ -4235,8 +4235,10 @@ function bindEvents() {
       const provider = button.dataset.authProvider;
       button.disabled = true;
       try {
-        const data = await apiFetch(`/api/auth/${provider}/start`);
-        window.location.assign(data.authorization_url);
+        // OAuth starts are top-level navigations; fetch would trigger CORS
+        // before the provider redirect can begin.
+        const startUrl = backendRequestUrl(`/api/auth/${provider}/start`);
+        window.location.assign(startUrl);
       } catch (error) {
         setStatus(error.message || "Sign-in is currently unavailable.");
         button.disabled = false;

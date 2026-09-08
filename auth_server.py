@@ -78,6 +78,12 @@ configured_origins = os.getenv("BISHOPLY_ALLOWED_ORIGINS")
 origin_default = "" if is_production() else "http://localhost:5173,http://127.0.0.1:5173"
 allowed_origins = [origin.strip() for origin in (configured_origins or origin_default).split(",")
                    if origin.strip() and origin.strip() != "*"]
+if is_production():
+    # Both Render spellings have been used during the staged rollout; retain
+    # explicit allowlisting until the public static-site hostname is finalized.
+    for origin in ("https://bishoply-staging.onrender.com", "https://bishoply-stagting.onrender.com"):
+        if origin not in allowed_origins:
+            allowed_origins.append(origin)
 app.add_middleware(CORSMiddleware, allow_origins=allowed_origins,
                    allow_credentials=True, allow_methods=["GET", "POST", "OPTIONS"],
                    allow_headers=["Authorization", "Content-Type", "X-Practice-Key", "X-CSRF-Token"])

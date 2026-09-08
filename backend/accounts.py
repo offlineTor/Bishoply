@@ -2,10 +2,12 @@
 import base64, hashlib, hmac, json, os, secrets, time
 from datetime import datetime, timedelta, timezone
 import httpx
+import logging
 from fastapi import HTTPException, Request
 from backend.database import db
 
 PROVIDERS = {"discord", "google", "apple"}
+log = logging.getLogger("uvicorn.error")
 
 def _secret():
     value = os.getenv("SESSION_SECRET")
@@ -43,7 +45,9 @@ def configured(provider):
 
 async def start(provider, user_id=None):
     if provider not in PROVIDERS: raise HTTPException(404, "Provider unavailable")
-    if not configured(provider): raise HTTPException(503, f"{provider.title()} sign-in is not configured")
+    if not configured(provider):
+        log.warning("oauth_provider_unconfigured provider=%s", provider)
+        raise HTTPException(503, f"{provider.title()} sign-in is not configured")
     redirect_uri = redirect_for(provider); state = _state(provider, redirect_uri, user_id)
     if provider == "google":
         url = "https://accounts.google.com/o/oauth2/v2/auth?" + httpx.QueryParams({"client_id":os.getenv("GOOGLE_CLIENT_ID"),"redirect_uri":redirect_uri,"response_type":"code","scope":"openid profile email","state":state,"nonce":json.loads(base64.urlsafe_b64decode(state.split('.')[0]+'=='))['nonce']})
