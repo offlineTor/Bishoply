@@ -84,6 +84,12 @@ class PracticeParityTests(unittest.IsolatedAsyncioTestCase):
             result = await api.active_game(SimpleNamespace(), None)
         self.assertFalse(result["active"])
 
+    def test_move_request_normalizes_legacy_uci_field(self):
+        from backend.api.practice import MoveRequest
+        self.assertEqual(MoveRequest.model_validate({"uci": "e2e4", "expected_ply": 0}).move, "e2e4")
+        with self.assertRaises(Exception):
+            MoveRequest.model_validate({"expected_ply": 0})
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 from typing import Literal
 import logging
 from fastapi import APIRouter, Header, Query, Depends, HTTPException, Request as HttpRequest
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.practice import config, service
 from backend.analysis.service import get_review
 from backend.practice.auth import discord_identity
@@ -28,7 +28,19 @@ class PositionRequest(Request):
 
 
 class MoveRequest(PositionRequest):
-    move: str = Field(pattern=r'^[a-h][1-8][a-h][1-8][qrbn]?$')
+    move: str | None = Field(default=None, pattern=r'^[a-h][1-8][a-h][1-8][qrbn]?$')
+    # Accept the historical browser field once, then normalize to `move`.
+    # This prevents stale Activity bundles from producing an opaque 422 while
+    # preserving one canonical service contract.
+    uci: str | None = Field(default=None, pattern=r'^[a-h][1-8][a-h][1-8][qrbn]?$')
+
+    @model_validator(mode='after')
+    def normalize_move(self):
+        if self.move is None and self.uci is not None:
+            self.move = self.uci
+        if self.move is None:
+            raise ValueError('move is required')
+        return self
 
 
 class HintRequest(PositionRequest):
