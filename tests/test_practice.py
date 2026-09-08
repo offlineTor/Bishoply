@@ -81,6 +81,25 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((await self.client.get(base+'/review',headers=headers)).json()['status'],'complete')
         self.assertEqual(before,await self.competitive_snapshot())
 
+    async def test_player_move_followed_by_real_bot_reply(self):
+        game, headers = await self.create(color='white', bot='scout')
+        base = f"/api/practice/games/{game['game_id']}"
+        moved = await self.client.post(base + '/move', headers=headers,
+                                       json={'expected_ply': 0, 'move': 'e2e4'})
+        self.assertEqual(moved.status_code, 200, moved.text)
+        self.assertTrue(moved.json()['needs_bot_move'])
+        replied = await self.client.post(base + '/bot-move', headers=headers,
+                                         json={'expected_ply': 1})
+        self.assertEqual(replied.status_code, 200, replied.text)
+        state = replied.json()
+        self.assertEqual(state['ply'], 2)
+        self.assertEqual(state['turn'], 'white')
+        self.assertEqual(len(state['moves']), 2)
+        self.assertEqual(state['moves'][0]['actor'], 'player')
+        self.assertEqual(state['moves'][1]['actor'], 'bot')
+        board = chess.Board(state['fen'])
+        self.assertEqual(board.turn, chess.WHITE)
+
     async def test_authentication_and_extra_fen_rejected(self):
         wrong=await self.client.post('/api/practice/games',json={'discord_id':202,'bot_id':'scout'})
         self.assertEqual(wrong.status_code,403)

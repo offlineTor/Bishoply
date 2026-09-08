@@ -1,6 +1,7 @@
 """Practice-only mutations with capability access, atomic turns and stale-job guards."""
 import asyncio
 import json
+import logging
 import secrets
 import uuid
 import chess
@@ -8,6 +9,8 @@ from fastapi import HTTPException
 from backend.database import db as database
 from backend.analysis import service as analysis
 from . import bots, config as C, storage
+
+log = logging.getLogger("uvicorn.error")
 
 
 def check_turn(game, board, ply, actor):
@@ -34,11 +37,17 @@ async def create(discord_id, bot_id, color):
             raise HTTPException(429,'Finish an existing Practice game before creating another')
         public_id='practice_'+uuid.uuid4().hex
         key=secrets.token_urlsafe(32)
+        # Keep the complete calibration snapshot server-side.  The public
+        # roster intentionally omits selection controls such as loss bands
+        # and candidate variety, but bot_move needs those fields to rebuild
+        # the profile for this game.
         bot=C.BOTS[bot_id].public()
+        bot_config={field: getattr(C.BOTS[bot_id], field)
+                    for field in C.Bot.__dataclass_fields__}
         await db.execute('''INSERT INTO practice_games(public_id,owner_discord_id,access_hash,player_color,
             bot_id,bot_strength,bot_personality,bot_config,starting_fen,current_fen,status)
             VALUES (?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,int(discord_id),storage.key_hash(key),color,
-            bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot),chess.STARTING_FEN,chess.STARTING_FEN))
+            bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot_config),chess.STARTING_FEN,chess.STARTING_FEN))
         await db.commit()
         game=await storage.require_game(db,public_id,key)
         return {**await storage.serialize(db,game),'access_key':key}
@@ -125,8 +134,12 @@ async def bot_response(public_id,key,ply):
     game,board,operation=await claim_operation(public_id,key,ply,'bot')
     claimed_revision = int(game.get('revision', 0))
     error=None
+    log.info("Bishoply Practice bot generation started bot=%s side=%s ply=%s", game['bot_id'],
+             'white' if board.turn else 'black', ply)
     try:
         metadata=await bots.bot_move(board,game['bot_id'],f'{public_id}:{ply}',json.loads(game['bot_config']))
+        log.info("Bishoply Practice bot move selected bot=%s move=%s candidates=%s", game['bot_id'],
+                 metadata.get('uci'), len(metadata.get('allowed_candidates', [])))
         move=chess.Move.from_uci(metadata['uci'])
         db=await database.connect()
         try:
@@ -139,14 +152,18 @@ async def bot_response(public_id,key,ply):
                 raise HTTPException(409,'Position changed during bot search')
             await append_move(db,latest,board,move,'bot',metadata)
             await db.commit()
+            log.info("Bishoply Practice bot move persisted bot=%s move=%s", game['bot_id'], move.uci())
         finally:
             await db.close()
     except (asyncio.TimeoutError, chess.engine.EngineError, RuntimeError, ValueError, OSError, KeyError) as exc:
         error='Bot unavailable or timed out; retry bot response'
+        log.error("Bishoply Practice bot generation failed type=%s message=%s", type(exc).__name__, str(exc))
         raise HTTPException(503,error) from exc
     finally:
         await release_operation(public_id,operation,error)
-    return await get(public_id,key)
+    result = await get(public_id,key)
+    log.info("Bishoply Practice bot response complete bot=%s ply=%s", game['bot_id'], result.get('ply'))
+    return result
 
 
 def projected_hint(result,stage):

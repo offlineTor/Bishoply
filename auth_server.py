@@ -186,6 +186,10 @@ async def startup():
 
 @app.on_event("shutdown")
 async def shutdown():
+    # Practice's reusable Stockfish pool is independent from rated Duel and
+    # must be closed with the FastAPI process to avoid orphan engines.
+    from backend.practice.bots import close_pool
+    await close_pool()
     if ENVIRONMENT == "production" or os.getenv("BISHOPLY_BOT_IN_APP", "false").lower() == "true":
         from bot import stop_bot
         await stop_bot()

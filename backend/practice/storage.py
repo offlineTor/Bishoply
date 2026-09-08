@@ -5,6 +5,7 @@ import json
 import chess
 from fastapi import HTTPException
 from backend.database import db as database
+from . import config as C
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS practice_games (
@@ -113,7 +114,9 @@ async def serialize(db, game):
     board,moves=await load_board(db,game)
     turn='white' if board.turn else 'black'
     return {'game_id':game['public_id'],'mode':'practice','unrated':True,'player_color':game['player_color'],
-            'bot':json.loads(game['bot_config']),
+            # bot_config contains private calibration controls used only by
+            # the server.  Keep the response on the public roster contract.
+            'bot':C.BOTS[game['bot_id']].public(),
             'status':game['status'],'result':game['result'],'termination_reason':game['termination_reason'],
             'fen':game['current_fen'],'ply':game['ply'],'revision':game['revision'] if 'revision' in game.keys() else 0,'turn':turn,
             'needs_bot_move':game['status']=='active' and turn!=game['player_color'],
