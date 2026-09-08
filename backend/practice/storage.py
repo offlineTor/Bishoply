@@ -55,7 +55,6 @@ CREATE TABLE IF NOT EXISTS practice_moves (
  UNIQUE(game_id,ply)
 );
 CREATE INDEX IF NOT EXISTS practice_history ON practice_games(owner_discord_id,created_at);
-CREATE INDEX IF NOT EXISTS practice_history_user ON practice_games(owner_user_id,created_at);
 CREATE TABLE IF NOT EXISTS practice_coach_context (
  game_id INTEGER PRIMARY KEY REFERENCES practice_games(id) ON DELETE CASCADE,
  last_ply INTEGER NOT NULL DEFAULT 0,
@@ -81,6 +80,14 @@ async def initialize():
             await db.execute("ALTER TABLE practice_games ADD COLUMN owner_user_id INTEGER")
         if database.using_postgres():
             await db.execute("ALTER TABLE practice_games ALTER COLUMN owner_discord_id DROP NOT NULL")
+        # CREATE TABLE IF NOT EXISTS cannot alter a pre-Accounts production
+        # table. Create the dependent index only after the additive column
+        # migration has completed, then safely associate legacy Discord rows
+        # with canonical users where the mapping is unambiguous.
+        await db.execute("""UPDATE practice_games
+            SET owner_user_id=(SELECT id FROM users WHERE users.discord_id=practice_games.owner_discord_id)
+            WHERE owner_user_id IS NULL AND owner_discord_id IS NOT NULL""")
+        await db.execute("CREATE INDEX IF NOT EXISTS practice_history_user ON practice_games(owner_user_id,created_at)")
         await db.execute("UPDATE practice_games SET operation_id=NULL,bot_error='Operation interrupted; retry' WHERE operation_id IS NOT NULL")
         await db.commit()
     except Exception:
