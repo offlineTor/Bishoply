@@ -145,6 +145,7 @@ async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=Non
         metadata=await bots.bot_move(board,game['bot_id'],f'{public_id}:{ply}',json.loads(game['bot_config']))
         log.info("Bishoply Practice bot move selected bot=%s move=%s candidates=%s", game['bot_id'],
                  metadata.get('uci'), len(metadata.get('allowed_candidates', [])))
+        log.info("practice_candidate_selected game=%s bot=%s ply=%s", public_id, game['bot_id'], ply)
         move=chess.Move.from_uci(metadata['uci'])
         db=await database.connect()
         try:
@@ -158,6 +159,7 @@ async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=Non
             await append_move(db,latest,board,move,'bot',metadata)
             await db.commit()
             log.info("Bishoply Practice bot move persisted bot=%s move=%s", game['bot_id'], move.uci())
+            log.info("practice_bot_persisted game=%s bot=%s ply=%s", public_id, game['bot_id'], ply + 1)
         finally:
             await db.close()
     except (asyncio.TimeoutError, chess.engine.EngineError, RuntimeError, ValueError, OSError, KeyError) as exc:
@@ -168,6 +170,7 @@ async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=Non
         await release_operation(public_id,operation,error)
     result = await get(public_id,key,owner_user_id,owner_discord_id)
     log.info("Bishoply Practice bot response complete bot=%s ply=%s", game['bot_id'], result.get('ply'))
+    log.info("practice_bot_response_sent game=%s bot=%s ply=%s", public_id, game['bot_id'], result.get('ply'))
     return result
 
 

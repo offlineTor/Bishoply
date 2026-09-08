@@ -26,7 +26,7 @@ async def session():
     path = os.getenv('STOCKFISH_PATH') or shutil.which('stockfish')
     if not path:
         raise RuntimeError('Stockfish unavailable')
-    log.info("Bishoply Practice engine started")
+    log.info("practice_engine_started")
     transport, engine = await chess.engine.popen_uci(path)
     try:
         if engine.id.get('name') != os.getenv('BISHOPLY_STOCKFISH_VERSION', EXPECTED_ENGINE):
@@ -181,7 +181,7 @@ async def bot_move(board, bot_id, seed, snapshot=None):
         scored.sort(key=lambda c:(c['outcome_units'],c['cp'] if c['cp'] is not None else (100000 if c['mate']>0 else -100000)),reverse=True)
         for rank, candidate in enumerate(scored, 1):
             candidate['rank'] = rank
-        log.info("Bishoply Practice candidates generated bot=%s count=%s", bot_id, len(scored))
+        log.info("practice_candidates_ready bot=%s count=%s", bot_id, len(scored))
         if not scored:
             raise RuntimeError('No legal candidates returned by Stockfish')
         base_move = scored[0]['move']
