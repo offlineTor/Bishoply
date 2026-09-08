@@ -7,8 +7,13 @@ import { classificationUi, classificationBadge } from "./classification-ui.js";
 import { DiscordSDK } from "@discord/embedded-app-sdk";
 
 const CLIENT_ID = "1546225609967935620";
-
-const discordSdk = new DiscordSDK(CLIENT_ID);
+// The Embedded App SDK requires Discord-injected query parameters at
+// construction time. Direct browser visits do not have them, so defer SDK
+// creation until we have positively identified an Activity context.
+const discordQuery = new URLSearchParams(window.location.search);
+const isDiscordActivity = ["frame_id", "instance_id", "platform"]
+  .every((key) => Boolean(discordQuery.get(key)));
+let discordSdk = null;
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -4382,10 +4387,30 @@ async function setupBishoply() {
 
     await checkBackend();
 
+    if (!isDiscordActivity) {
+      // Standalone browser mode is intentionally unauthenticated: no fake
+      // Discord identity or access token is created. Public shell content can
+      // still load, while protected actions use the normal auth error path.
+      if (sdkCheck) setCheck(sdkCheck, "Browser mode");
+      appReady = true;
+      setControlsEnabled(true);
+      setConnectionLabel("Connected");
+      setStatus("Bishoply is ready in browser mode.");
+      if (appSplash) {
+        appSplash.classList.add("is-ready");
+        window.setTimeout(() => appSplash.remove(), 180);
+      }
+      renderEmptyGame();
+      renderPracticeShell();
+      await loadPracticeBots();
+      return;
+    }
+
     setStatus(
       "Connecting to Discord..."
     );
 
+    discordSdk = new DiscordSDK(CLIENT_ID);
     await discordSdk.ready();
 
     setCheck(
@@ -4487,10 +4512,7 @@ async function setupBishoply() {
     startGameSync();
 
   } catch (error) {
-    console.error(
-      "Bishoply startup failed:",
-      error
-    );
+    console.error("Bishoply startup failed:", error?.name || "Error", error?.message || "Unknown error");
 
     appReady = false;
 
@@ -4501,7 +4523,7 @@ async function setupBishoply() {
     );
 
     setStatus(
-      `Bishoply error: ${error.message}`
+      `Bishoply could not start: ${error?.message || "Please refresh and try again."}`
     );
     if (appSplash) {
       appSplash.classList.add("is-ready");
