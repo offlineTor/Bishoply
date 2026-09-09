@@ -4,6 +4,7 @@ import hmac
 import json
 import chess
 import logging
+from datetime import datetime, timezone
 from fastapi import HTTPException
 from backend.database import db as database
 from . import config as C
@@ -110,8 +111,14 @@ async def cleanup_active_games(db, user_id, discord_id=None, keep_public_id=None
         rows = sorted(rows, key=lambda row: row['public_id'] == keep_public_id, reverse=True)
     if len(rows) <= 1: return rows[0] if rows else None
     kept = rows[0]
+    # Practice timestamps are TEXT on both backends. PostgreSQL cannot
+    # resolve COALESCE(TEXT, CURRENT_TIMESTAMP) to a common type.
+    now = datetime.now(timezone.utc).isoformat()
     for row in rows[1:]:
-        await db.execute("UPDATE practice_games SET status='draw',result=NULL,termination_reason='superseded',completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP,operation_id=NULL WHERE id=? AND status='active'", (row['id'],))
+        await db.execute("""UPDATE practice_games SET status='draw',result=NULL,
+            termination_reason='superseded',completed_at=COALESCE(completed_at,?),
+            updated_at=?,operation_id=NULL WHERE id=? AND status='active'""",
+            (now, now, row['id']))
     log.info('practice_active_cleanup user_id=%s kept_game=%s superseded_count=%s', user_id, kept['public_id'], len(rows)-1)
     return kept
 
