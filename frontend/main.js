@@ -91,6 +91,7 @@ const practiceRestartButton = $("#practice-restart-button");
 const practiceNewOpponentButton = $("#practice-new-opponent-button");
 const practiceCreateForm = $("#practice-create-form");
 const practiceStatusLine = $("#practice-status-line");
+const practiceRecoveryBanner = $("#practice-recovery-banner");
 
 const moveInput = $("#move-input");
 const moveButton = $("#move-button");
@@ -114,6 +115,10 @@ let currentGame = null;
 let reviewPosition = null;
 let reviewFlipped = false;
 let practiceGame = null;
+// A recovered game is discovered during bootstrap but only enters the board
+// after the player explicitly chooses Resume. This keeps the Practice lobby
+// usable when a previous session is still active.
+let pendingPracticeRecovery = null;
 let practiceAccessKey = null;
 
 function practiceAuthHeaders(headers = {}) {
@@ -1000,7 +1005,17 @@ function showPage(pageName) {
   }
 
   if (pageName === "practice") {
-    renderPracticeShell();
+    // Navigation opens the lobby. The current game remains in memory and is
+    // available through Resume, but leaving/re-entering Practice never starts
+    // a game implicitly.
+    practiceView = "loading";
+    renderPracticeView("loading");
+    window.setTimeout(() => {
+      if (practiceView === "loading" && document.querySelector("#page-practice.active")) {
+        practiceView = "select";
+        renderPracticeShell();
+      }
+    }, 180);
   } else if (practiceReview.active) {
     practiceReview.close();
   }
@@ -3186,8 +3201,11 @@ function renderPracticeShell() {
     const moveCount = practiceGame?.moves?.length || 0;
     practiceUndoButton.disabled = !practiceGame || practiceGame.status !== "active" || moveCount === 0 || practiceBusy;
   }
-  renderPracticeView(hasGame ? "match" : "select");
+  // Keep lobby/board state explicit. Discovering a game must not hijack the
+  // lobby; only an explicit Resume or Start action enters the board.
+  renderPracticeView(practiceView);
   renderPracticeColorToggle();
+  renderPracticeRecoveryBanner();
   renderPracticeInfo();
   renderPracticePlayers();
   renderPracticeMoves();
@@ -3236,7 +3254,7 @@ async function loadPracticeBots() {
     }
     practiceBots.innerHTML = practiceBotRoster.map(bot => {
       const selected = bot.bot_id === practiceChoice.bot_id;
-      const blocked = practiceGame?.status === "active";
+      const blocked = practiceView === "match" && practiceGame?.status === "active";
       return `
         <article class="practice-bot-card ${selected ? "selected" : ""}" data-practice-bot="${escapeHtml(bot.bot_id)}">
           <div class="practice-bot-icon"><img src="${escapeHtml(bot.icon_path)}" alt="" loading="lazy"></div>
@@ -3271,6 +3289,7 @@ async function loadPracticeBots() {
       });
     });
     renderPracticeColorToggle();
+    renderPracticeRecoveryBanner();
   } catch (error) {
     practiceBots.innerHTML = `
       <div class="empty-mini">
@@ -3282,6 +3301,66 @@ async function loadPracticeBots() {
   }
 }
 
+function renderPracticeRecoveryBanner() {
+  if (!practiceRecoveryBanner) return;
+  const game = pendingPracticeRecovery || (practiceView === "select" && practiceGame?.status === "active" ? practiceGame : null);
+  if (!game) {
+    practiceRecoveryBanner.hidden = true;
+    practiceRecoveryBanner.innerHTML = "";
+    return;
+  }
+  const bot = getPracticeBot(game);
+  const moves = Array.isArray(game.moves) ? game.moves.length : Number(game.ply || 0);
+  practiceRecoveryBanner.hidden = false;
+  practiceRecoveryBanner.innerHTML = `
+    <div class="practice-recovery-copy">
+      <span class="eyebrow gold">Active Practice game</span>
+      <strong>Resume ${escapeHtml(bot?.display_name || "your previous game")}</strong>
+      <span>${moves ? `${moves} move${moves === 1 ? "" : "s"} played` : "No moves yet"}. Your history is preserved.</span>
+    </div>
+    <div class="practice-recovery-actions">
+      <button class="gold-button" type="button" data-practice-resume>Resume Previous Game</button>
+      <button class="dark-button" type="button" data-practice-new>Start New Game</button>
+    </div>`;
+  practiceRecoveryBanner.querySelector("[data-practice-resume]")?.addEventListener("click", () => resumeActivePractice());
+  practiceRecoveryBanner.querySelector("[data-practice-new]")?.addEventListener("click", () => startNewPracticeFromLobby());
+}
+
+function startNewPracticeFromLobby() {
+  pendingPracticeRecovery = null;
+  practiceGame = null;
+  practiceAccessKey = null;
+  practiceSelectedSquare = null;
+  practiceLegalMoves = [];
+  practiceCanMove = false;
+  practiceBoardPieces = {};
+  practiceView = "select";
+  renderPracticeShell();
+  setPracticeStatus("Choose a bot to start training.");
+}
+
+async function resumeActivePractice() {
+  if (!pendingPracticeRecovery || practiceCreateBusy || practiceBotBusy) return;
+  const game = pendingPracticeRecovery;
+  pendingPracticeRecovery = null;
+  practiceAccessKey = null;
+  practiceView = "loading";
+  renderPracticeView("loading");
+  const bot = getPracticeBot(game);
+  if (practiceLoadingBot) practiceLoadingBot.textContent = bot?.display_name || "Your opponent";
+  if (practiceLoadingStrength) practiceLoadingStrength.textContent = bot?.estimated_strength ? `Estimated Bot Strength ${formatNumber(bot.estimated_strength)}` : "";
+  if (practiceLoadingCopy) practiceLoadingCopy.textContent = "Restoring your position…";
+  try {
+    await renderPracticeGame(game);
+    if (practiceGame?.needs_bot_move) await startPracticeBotIfNeeded();
+    setPracticeStatus(`Practice resumed against ${getPracticeBot(practiceGame)?.display_name || "the bot"}.`);
+  } catch (error) {
+    practiceView = "select";
+    renderPracticeShell();
+    setPracticeStatus("That Practice game could not be resumed. Choose a bot to start a new game.");
+  }
+}
+
 async function recoverActivePractice() {
   if (!currentProfile) return false;
   try {
@@ -3289,10 +3368,10 @@ async function recoverActivePractice() {
     if (!active?.active || !active.game_id) return false;
     const game = active.game || await apiFetch(`/api/practice/games/${active.game_id}`, { headers: practiceAuthHeaders() });
     practiceAccessKey = null;
-    practiceGame = decoratePracticeGame(game);
-    await renderPracticeGame(practiceGame);
-    if (practiceGame.needs_bot_move) await startPracticeBotIfNeeded();
-    setPracticeStatus(`Practice resumed against ${getPracticeBot(practiceGame)?.display_name || "the bot"}.`);
+    pendingPracticeRecovery = decoratePracticeGame(game);
+    practiceView = "select";
+    renderPracticeShell();
+    setPracticeStatus("A previous Practice game is ready to resume.");
     return true;
   } catch (error) {
     if (import.meta.env?.DEV) console.debug("[Bishoply Startup] active Practice recovery skipped", { status: error?.status || 0 });
@@ -3602,6 +3681,9 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
     return;
   }
   practiceCreateBusy = true;
+  pendingPracticeRecovery = null;
+  practiceGame = null;
+  practiceAccessKey = null;
   practiceChoice.bot_id = botId;
   practiceChoice.player_color = color === "black" ? "black" : "white";
   practicePlayerColor = practiceChoice.player_color;
@@ -3691,6 +3773,7 @@ async function syncPracticeGame() {
 
 async function renderPracticeGame(game) {
   practiceGame = decoratePracticeGame(game);
+  practiceView = "match";
   practicePlayerColor = getPracticeColor(game);
   if (game.status === "active" && game.turn === game.player_color) {
     practiceLegalMoves = game.legal_moves || [];
@@ -4630,9 +4713,14 @@ async function setupBishoply() {
         window.setTimeout(() => appSplash.remove(), 180);
       }
       renderEmptyGame();
-      renderPracticeShell();
+      practiceView = "loading";
+      renderPracticeView("loading");
       await loadPracticeBots();
       if (appReady) await recoverActivePractice();
+      if (!pendingPracticeRecovery) {
+        practiceView = "select";
+        renderPracticeShell();
+      }
       return;
     }
 
@@ -4737,9 +4825,14 @@ async function setupBishoply() {
     );
 
     renderEmptyGame();
-    renderPracticeShell();
+    practiceView = "loading";
+    renderPracticeView("loading");
     await loadPracticeBots();
     await recoverActivePractice();
+    if (!pendingPracticeRecovery) {
+      practiceView = "select";
+      renderPracticeShell();
+    }
 
     // History is a secondary panel. A transient history failure must not
     // invalidate an otherwise authenticated, playable session.
