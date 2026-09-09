@@ -3329,6 +3329,12 @@ async function startPracticeBotIfNeeded() {
     setPracticeStatus("Bot timed out. Retry the move or start a new game.");
   } finally {
     practiceBotBusy = false;
+    // The opening reply (player as Black) is rendered while the bot flag is
+    // set. Recompute the interaction gate once the reply has settled so the
+    // player's newly available turn is clickable without a refresh.
+    setPracticeMoveState();
+    renderPracticeBoard();
+    renderPracticeInfo();
   }
 }
 
