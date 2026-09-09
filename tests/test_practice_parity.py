@@ -90,6 +90,19 @@ class PracticeParityTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(Exception):
             MoveRequest.model_validate({"expected_ply": 0})
 
+    async def test_raw_discord_move_payloads_enter_route_without_fastapi_body_validation(self):
+        from backend.api import practice as api
+        from unittest.mock import AsyncMock
+        class Request:
+            headers = {"content-type": "application/json"}
+            async def json(self): return self.payload
+        for payload in ({"move": "e2e4", "expected_ply": 0}, {"uci": "e2e4"}):
+            request = Request(); request.payload = payload
+            with patch.object(api, "authenticated_owner", new=AsyncMock(return_value=(self.user["id"], 1546225609967935620))), patch.object(api.service, "player_move", new=AsyncMock(return_value={"ply": 1})) as moved:
+                result = await api.player_move("practice_test", request, None, "Bearer token")
+            self.assertEqual(result["ply"], 1)
+            self.assertEqual(moved.await_args.args[2], "e2e4")
+
 
 if __name__ == "__main__":
     unittest.main()

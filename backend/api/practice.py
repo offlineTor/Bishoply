@@ -1,5 +1,6 @@
 """Practice routes never accept arbitrary FENs or mutate multiplayer games."""
 from typing import Literal
+import re
 import logging
 from fastapi import APIRouter, Header, Query, Depends, HTTPException, Request as HttpRequest
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -168,9 +169,28 @@ async def read_game(game_id: str, request: HttpRequest, x_practice_key: str | No
 
 
 @router.post('/games/{game_id}/move')
-async def player_move(game_id: str, payload: MoveRequest, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+async def player_move(game_id: str, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    try:
+        raw = await request.json()
+    except Exception as exc:
+        raise HTTPException(400, 'Practice move payload must be valid JSON') from exc
+    log.info('practice_move_route_entered game=%s keys=%s types=%s content_type=%s authorization=%s practice_key=%s',
+             game_id, sorted(raw.keys()) if isinstance(raw, dict) else [],
+             {key: type(value).__name__ for key, value in raw.items()} if isinstance(raw, dict) else type(raw).__name__,
+             request.headers.get('content-type', ''), bool(authorization), bool(x_practice_key))
+    if not isinstance(raw, dict):
+        raise HTTPException(400, 'Practice move payload must be an object')
+    move = raw.get('move') or raw.get('uci')
+    expected = raw.get('expected_ply')
+    if not isinstance(move, str) or not re.fullmatch(r'[a-h][1-8][a-h][1-8][qrbn]?', move):
+        raise HTTPException(422, 'Invalid Practice move payload')
+    if expected is not None:
+        try: expected = int(expected)
+        except (TypeError, ValueError): raise HTTPException(422, 'Invalid Practice ply')
+        if expected < 0: raise HTTPException(422, 'Invalid Practice ply')
+    log.info('practice_move_payload_normalized game=%s move=%s expected_ply=%s source=%s', game_id, move, expected, 'move' if raw.get('move') else 'uci')
     owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
-    return await service.player_move(game_id,x_practice_key,payload.move,payload.expected_ply,*(owner or (None,None)))
+    return await service.player_move(game_id,x_practice_key,move,expected,*(owner or (None,None)))
 
 
 @router.post('/games/{game_id}/bot-move')

@@ -36,6 +36,7 @@ load_dotenv()
 
 ENVIRONMENT = os.getenv("BISHOPLY_ENV", "development").strip().lower()
 startup_log = logging.getLogger("uvicorn.error")
+BUILD_ID = os.getenv("RENDER_GIT_COMMIT", "practice-move-raw-v1")
 
 CLIENT_ID = os.getenv("DISCORD_CLIENT_ID")
 CLIENT_SECRET = os.getenv("DISCORD_CLIENT_SECRET")
@@ -116,6 +117,8 @@ async def security_middleware(request: Request, call_next):
 
 @app.exception_handler(RequestValidationError)
 async def validation_error_handler(request: Request, exc: RequestValidationError):
+    if request.url.path.startswith('/api/practice/'):
+        logging.getLogger('bishoply.api').warning('practice_fastapi_validation_failure path=%s method=%s locs=%s types=%s', request.url.path, request.method, [error.get('loc', ()) for error in exc.errors()], [error.get('type') for error in exc.errors()])
     logging.getLogger("bishoply.api").warning(
         "request_validation_failed path=%s fields=%s",
         request.url.path,
@@ -157,6 +160,7 @@ class ExchangeRequest(BaseModel):
 @app.on_event("startup")
 async def startup():
     startup_log.info("Bishoply production startup: environment=%s", ENVIRONMENT)
+    startup_log.info("bishoply_build=%s", BUILD_ID)
     startup_log.info("Discord bot token configured: %s", "yes" if os.getenv("DISCORD_BOT_TOKEN") else "no")
     startup_log.info("Bishoply database schema init start")
     await initialize_database()
