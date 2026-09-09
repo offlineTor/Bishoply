@@ -16,6 +16,8 @@ import chess
 from backend.chess_knowledge import CoachContext
 from backend.chess_knowledge.emma import game_summary
 
+log = logging.getLogger('uvicorn.error')
+
 COMPLETE = {'white_win', 'black_win', 'draw'}
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS game_analysis (
@@ -97,19 +99,41 @@ async def require_subject(db, public_id, kind='live', key=None):
 
 
 async def enqueue_feedback(db, public_id, ply):
-    """Caller owns the move transaction; no accepted move loses its analysis job."""
+    """Queue one feedback job per subject/ply.
+
+    The caller owns the surrounding move transaction.  The unique key is the
+    idempotency boundary so retries of a move or worker request cannot turn a
+    valid Practice move into a database error.
+    """
     game = await (await db.execute("SELECT id FROM practice_games WHERE public_id=? AND mode='practice'",(public_id,))).fetchone()
     if game is None:
         raise HTTPException(403, 'Practice mode required')
     move = await (await db.execute("SELECT id FROM practice_moves WHERE game_id=? AND ply=? AND actor='player'",(game['id'],ply))).fetchone()
     if move is None:
         raise HTTPException(404, 'Played player move required')
+    existing = await (await db.execute("""SELECT id,status FROM analysis_revisions
+        WHERE subject_type='feedback' AND subject_id=? AND target_ply=? AND revision=1""",
+        (public_id, ply))).fetchone()
+    if existing is not None:
+        log_message = 'analysis_feedback_already_queued' if existing['status'] in ('queued', 'analyzing') else 'analysis_feedback_already_exists'
+        log.info('%s subject_type=feedback subject_id=%s target_ply=%s revision=1',
+                 log_message, public_id, ply)
+        return False
     count = await (await db.execute("SELECT COUNT(*) FROM analysis_revisions WHERE subject_type='feedback' AND status IN ('queued','analyzing')")).fetchone()
     if count[0] >= 32:
         raise HTTPException(429, 'Practice analysis queue full; retry your move shortly')
-    await db.execute("""INSERT INTO analysis_revisions(subject_type,subject_id,target_ply,revision,
+    cursor = await db.execute("""INSERT INTO analysis_revisions(subject_type,subject_id,target_ply,revision,
         model_version,classifier_version,accuracy_model_version,status)
-        VALUES ('feedback',?,?,1,?,?,?,'queued')""",(public_id,ply,C.MODEL_VERSION,C.CLASSIFIER_VERSION,C.ACCURACY_VERSION))
+        VALUES ('feedback',?,?,1,?,?,?,'queued')
+        ON CONFLICT(subject_type,subject_id,target_ply,revision) DO NOTHING""",
+        (public_id,ply,C.MODEL_VERSION,C.CLASSIFIER_VERSION,C.ACCURACY_VERSION))
+    if getattr(cursor, 'rowcount', 1) == 0:
+        log.info('analysis_feedback_already_queued subject_type=feedback subject_id=%s target_ply=%s revision=1',
+                 public_id, ply)
+        return False
+    log.info('analysis_feedback_enqueued subject_type=feedback subject_id=%s target_ply=%s revision=1',
+             public_id, ply)
+    return True
 
 
 def decoded(row, total=0):
@@ -153,7 +177,8 @@ async def get_review(public_id, enqueue=False, *, new_revision=False, kind='live
                 raise HTTPException(429,'Analysis queue full; retry later')
             revision=rows[0]['revision']+1 if rows else 1
             await db.execute('''INSERT INTO analysis_revisions(subject_type,subject_id,target_ply,revision,
-                model_version,classifier_version,accuracy_model_version,status) VALUES (?,?,?,?,?,?,?,'queued')''',
+                model_version,classifier_version,accuracy_model_version,status) VALUES (?,?,?,?,?,?,?,'queued')
+                ON CONFLICT(subject_type,subject_id,target_ply,revision) DO NOTHING''',
                 (*params,revision,C.MODEL_VERSION,C.CLASSIFIER_VERSION,C.ACCURACY_VERSION))
             await db.commit()
             return {'status':'queued','progress':0,'analysis_revision':revision,'result':None,'analyzed_plies':0,'total_plies':total,'percentage':0}

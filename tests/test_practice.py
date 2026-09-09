@@ -100,6 +100,24 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
         board = chess.Board(state['fen'])
         self.assertEqual(board.turn, chess.WHITE)
 
+    async def test_feedback_enqueue_is_idempotent_for_retried_practice_move(self):
+        game, headers = await self.create(color='white', bot='scout')
+        base = f"/api/practice/games/{game['game_id']}"
+        moved = await self.client.post(base + '/move', headers=headers,
+                                       json={'expected_ply': 0, 'move': 'e2e4'})
+        self.assertEqual(moved.status_code, 200, moved.text)
+        db = await database.connect()
+        try:
+            inserted = await analysis.enqueue_feedback(db, game['game_id'], 1)
+            await db.commit()
+            self.assertFalse(inserted)
+            rows = await (await db.execute("""SELECT COUNT(*) FROM analysis_revisions
+                WHERE subject_type='feedback' AND subject_id=? AND target_ply=1 AND revision=1""",
+                (game['game_id'],))).fetchone()
+            self.assertEqual(rows[0], 1)
+        finally:
+            await db.close()
+
     async def test_authentication_and_extra_fen_rejected(self):
         wrong=await self.client.post('/api/practice/games',json={'discord_id':202,'bot_id':'scout'})
         self.assertEqual(wrong.status_code,403)
