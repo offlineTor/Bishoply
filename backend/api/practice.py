@@ -25,7 +25,9 @@ class CreateRequest(Request):
 
 
 class PositionRequest(Request):
-    expected_ply: int = Field(ge=0,le=config.MAX_HISTORY_PLIES)
+    # Older Activity clients omitted this value; the service derives the
+    # current server-side ply while still enforcing it when supplied.
+    expected_ply: int | None = Field(default=None, ge=0,le=config.MAX_HISTORY_PLIES)
 
 
 class MoveRequest(PositionRequest):
@@ -209,6 +211,8 @@ async def player_move(game_id: str, request: HttpRequest, x_practice_key: str | 
 
 @router.post('/games/{game_id}/bot-move')
 async def bot_move(game_id: str, payload: PositionRequest, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    log.info('practice_bot_move_route_entered game=%s expected_ply=%s authorization=%s practice_key=%s',
+             game_id, payload.expected_ply, bool(authorization), bool(x_practice_key))
     owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
     return await service.bot_response(game_id,x_practice_key,payload.expected_ply,*(owner or (None,None)))
 
@@ -231,13 +235,18 @@ async def undo(game_id: str, request: HttpRequest, x_practice_key: str | None = 
 
 
 @router.get('/games/{game_id}/analysis/{ply}')
-async def read_feedback(game_id: str, ply: int, x_practice_key: str = Header(...)):
-    return await get_review(game_id,kind='feedback',ply=ply,key=x_practice_key)
+async def read_feedback(game_id: str, ply: int, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    return await get_review(game_id,kind='feedback',ply=ply,key=x_practice_key,owner_user_id=(owner or (None,None))[0],owner_discord_id=(owner or (None,None))[1])
 
 
 @router.post('/games/{game_id}/analysis/{ply}')
-async def request_feedback(game_id: str, ply: int, x_practice_key: str = Header(...)):
-    return await get_review(game_id,True,kind='feedback',ply=ply,key=x_practice_key)
+async def request_feedback(game_id: str, ply: int, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    log.info('practice_analysis_route_entered game=%s ply=%s authorization=%s practice_key=%s', game_id, ply, bool(authorization), bool(x_practice_key))
+    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+    result = await get_review(game_id,True,kind='feedback',ply=ply,key=x_practice_key,owner_user_id=(owner or (None,None))[0],owner_discord_id=(owner or (None,None))[1])
+    log.info('practice_analysis_completed game=%s ply=%s status=%s', game_id, ply, result.get('status'))
+    return result
 
 
 @router.get('/games/{game_id}/review')

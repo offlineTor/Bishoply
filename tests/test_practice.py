@@ -193,6 +193,14 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(moved.json()['moves'][0]['color'],'white')
         self.assertEqual(moved.json()['moves'][1]['color'],'black')
 
+    async def test_bot_move_accepts_omitted_expected_ply(self):
+        game, headers = await self.create('black')
+        base = f"/api/practice/games/{game['game_id']}"
+        with patch.object(bots, 'bot_move', new=AsyncMock(return_value={'uci': 'e2e4'})):
+            response = await self.client.post(base + '/bot-move', headers=headers, json={})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['ply'], 1)
+
     async def test_bot_failure_releases_claim_without_move(self):
         game,headers=await self.create('black')
         base=f"/api/practice/games/{game['game_id']}"

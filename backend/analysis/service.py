@@ -83,16 +83,14 @@ async def initialize():
     _worker = [asyncio.create_task(work_loop(lane)) for lane in ('fast','deep','feedback')]
 
 
-async def require_subject(db, public_id, kind='live', key=None):
+async def require_subject(db, public_id, kind='live', key=None, owner_user_id=None, owner_discord_id=None):
     if kind == 'live':
         game = await (await db.execute('SELECT * FROM games WHERE public_id=?', (public_id,))).fetchone()
         if game is None:
             raise HTTPException(404, 'Game not found')
     else:
         from backend.practice.storage import require_game
-        if key is None:
-            raise HTTPException(401, 'Practice access key required')
-        game = await require_game(db, public_id, key)
+        game = await require_game(db, public_id, key, owner_user_id, owner_discord_id)
     if kind != 'feedback' and game['status'] not in COMPLETE:
         raise HTTPException(409, 'Game Review requires a completed game')
     return game
@@ -154,12 +152,12 @@ def decoded(row, total=0):
             'percentage': result.get('percentage', 0) if result else 0}
 
 
-async def get_review(public_id, enqueue=False, *, new_revision=False, kind='live', ply=0, key=None):
+async def get_review(public_id, enqueue=False, *, new_revision=False, kind='live', ply=0, key=None, owner_user_id=None, owner_discord_id=None):
     if kind not in ('live','practice','feedback'):
         raise HTTPException(400, 'Invalid analysis kind')
     db = await database.connect()
     try:
-        game = await require_subject(db, public_id, kind, key)
+        game = await require_subject(db, public_id, kind, key, owner_user_id, owner_discord_id)
         if kind == 'feedback':
             move = await (await db.execute("SELECT id FROM practice_moves WHERE game_id=? AND ply=? AND actor='player'",(game['id'],ply))).fetchone()
             if move is None:

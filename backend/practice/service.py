@@ -121,6 +121,8 @@ async def claim_operation(public_id,key,ply,actor,owner_user_id=None,owner_disco
         await db.execute('BEGIN IMMEDIATE')
         game=await storage.require_game(db,public_id,key,owner_user_id,owner_discord_id)
         board,_=await storage.load_board(db,game)
+        if ply is None:
+            ply = int(game['ply'])
         check_turn(game,board,ply,actor)
         if game['operation_id']:
             raise HTTPException(409,'An engine operation is already running')
@@ -144,6 +146,7 @@ async def release_operation(public_id,operation,error=None):
 async def bot_response(public_id,key,ply,owner_user_id=None,owner_discord_id=None):
     log.info("practice_bot_requested game=%s ply=%s", public_id, ply)
     game,board,operation=await claim_operation(public_id,key,ply,'bot',owner_user_id,owner_discord_id)
+    ply = int(game['ply'])
     claimed_revision = int(game.get('revision', 0))
     error=None
     log.info("Bishoply Practice bot generation started bot=%s side=%s ply=%s", game['bot_id'],
