@@ -1482,6 +1482,12 @@ code {
 #page-practice .practice-toggle-button { min-height: 40px; border-radius: 12px; background: transparent; color: var(--text); font-weight: 800; }
 #page-practice .practice-toggle-button.active { background: linear-gradient(145deg, var(--gold-bright), #caa45e 55%, #7f642d); color: #17120a; }
 #page-practice .practice-status-line { margin-top: 2px; color: var(--muted); font-size: 12px; line-height: 1.55; }
+#page-practice .practice-recovery-banner { display:grid; gap:12px; margin:4px 0 6px; padding:12px; border:1px solid rgba(220,196,139,.28); border-radius:14px; background:rgba(220,196,139,.07); }
+#page-practice .practice-recovery-copy { display:grid; gap:3px; }
+#page-practice .practice-recovery-copy strong { color:#f0ddb0; font-size:14px; }
+#page-practice .practice-recovery-copy span:last-child { color:var(--muted); font-size:11px; }
+#page-practice .practice-recovery-actions { display:flex; flex-wrap:wrap; gap:8px; }
+#page-practice .practice-recovery-actions button { min-height:36px; padding:8px 12px; }
 #page-practice .practice-landing.is-launching .practice-status-line { color: #e6cf91; animation: practiceLaunchPulse 1.1s ease-in-out infinite; }
 #page-practice .practice-bot-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; align-content: start; }
 #page-practice .practice-bot-card { display: grid; gap: 8px; align-content: start; padding: 12px; border-radius: 20px; border: 1px solid var(--line); background: linear-gradient(145deg, rgba(255,255,255,0.055), rgba(255,255,255,0.02)); box-shadow: inset 0 1px 0 rgba(255,255,255,0.03); min-height: 100%; }

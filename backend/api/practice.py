@@ -2,7 +2,7 @@
 from typing import Literal
 import re
 import logging
-from fastapi import APIRouter, Header, Query, Depends, HTTPException, Request as HttpRequest
+from fastapi import APIRouter, Body, Header, Query, Depends, HTTPException, Request as HttpRequest
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from backend.practice import config, service
 from backend.analysis.service import get_review
@@ -210,7 +210,8 @@ async def player_move(game_id: str, request: HttpRequest, x_practice_key: str | 
 
 
 @router.post('/games/{game_id}/bot-move')
-async def bot_move(game_id: str, payload: PositionRequest, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+async def bot_move(game_id: str, payload: PositionRequest | None = Body(default=None), request: HttpRequest = None, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    payload = payload or PositionRequest()
     log.info('practice_bot_move_route_entered game=%s expected_ply=%s authorization=%s practice_key=%s',
              game_id, payload.expected_ply, bool(authorization), bool(x_practice_key))
     owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
