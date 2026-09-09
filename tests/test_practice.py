@@ -201,6 +201,21 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['ply'], 1)
 
+    async def test_analysis_and_bot_move_allow_canonical_owner_without_legacy_key(self):
+        game, _ = await self.create('black')
+        base = f"/api/practice/games/{game['game_id']}"
+        identity = AsyncMock(return_value=101)
+        with patch('backend.api.practice.discord_identity', identity), \
+             patch.object(bots, 'bot_move', new=AsyncMock(return_value={'uci': 'e2e4'})):
+            analysis_response = await self.client.post(base + '/analysis/0',
+                                                       headers={'Authorization': 'Bearer activity-token'})
+            self.assertNotEqual(analysis_response.status_code, 422, analysis_response.text)
+            bot_response = await self.client.post(base + '/bot-move',
+                                                  headers={'Authorization': 'Bearer activity-token'}, json={})
+        self.assertEqual(analysis_response.status_code, 404)
+        self.assertEqual(bot_response.status_code, 200, bot_response.text)
+        self.assertEqual(bot_response.json()['ply'], 1)
+
     async def test_bot_failure_releases_claim_without_move(self):
         game,headers=await self.create('black')
         base=f"/api/practice/games/{game['game_id']}"
