@@ -201,6 +201,14 @@ class PracticeTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.json()['ply'], 1)
 
+    async def test_bot_move_accepts_missing_json_body(self):
+        game, headers = await self.create('black')
+        base = f"/api/practice/games/{game['game_id']}"
+        with patch.object(bots, 'bot_move', new=AsyncMock(return_value={'uci': 'e2e4'})):
+            response = await self.client.post(base + '/bot-move', headers=headers)
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.json()['ply'], 1)
+
     async def test_analysis_and_bot_move_allow_canonical_owner_without_legacy_key(self):
         game, _ = await self.create('black')
         base = f"/api/practice/games/{game['game_id']}"
