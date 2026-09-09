@@ -212,11 +212,17 @@ def process_one(lane=None):
             db.commit(); return False
         db.execute("UPDATE analysis_revisions SET status='analyzing',updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
         db.commit()
+        stage = 'claimed'
+        log.info('analysis_revision_claimed revision_id=%s subject_type=%s subject_id=%s target_ply=%s',
+                 row['id'], row['subject_type'], row['subject_id'], row['target_ply'])
         try:
             practice=row['subject_type']!='live'
             table='practice_games' if practice else 'games'
             move_table='practice_moves' if practice else 'game_moves'
             game=dict(db.execute(f'SELECT * FROM {table} WHERE public_id=?',(row['subject_id'],)).fetchone())
+            stage = 'position_loaded'
+            log.info('analysis_position_loaded revision_id=%s subject_type=%s target_ply=%s',
+                     row['id'], row['subject_type'], row['target_ply'])
             if practice and game['mode']!='practice':
                 raise ValueError('Practice mode required')
             if row['subject_type']!='feedback' and game['status'] not in COMPLETE:
@@ -234,7 +240,11 @@ def process_one(lane=None):
                     board.push_uci(previous['uci'])
                     if board.fen()!=previous['fen_after']:
                         raise ValueError('Stored Practice replay mismatch')
+                stage = 'engine_checkout'
+                log.info('analysis_engine_checkout revision_id=%s subject_type=%s', row['id'], row['subject_type'])
                 with Engine() as engine:
+                    stage = 'engine_started'
+                    log.info('analysis_engine_started revision_id=%s subject_type=%s', row['id'], row['subject_type'])
                     context, context_ply, context_revision = _load_practice_context(db, game['id'])
                     result=analyze_move(engine,board,chess.Move.from_uci(target['uci']),practice=True,
                         revision=row['revision'],assisted=bool(target['assisted']),preliminary=True,
@@ -244,6 +254,9 @@ def process_one(lane=None):
                     if isinstance(result.get('intelligence'), dict): result['intelligence']['ply'] = target['ply']
                     result['hint_count']=target['hint_count']
                     _save_practice_context(db, game['id'], int(target['ply']), int(row['revision']), context)
+                stage = 'engine_result'
+                log.info('analysis_engine_result revision_id=%s subject_type=%s target_ply=%s',
+                         row['id'], row['subject_type'], row['target_ply'])
                 if result['fen']!=target['fen_after']:
                     raise ValueError('Practice feedback position mismatch')
             else:
@@ -264,10 +277,22 @@ def process_one(lane=None):
             db.execute("UPDATE analysis_revisions SET status=?,result=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE id=?",
                 ('queued' if result.get('stage')=='deep_queued' else 'failed' if result.get('stage')=='failed' else 'complete',json.dumps(result),
                  'Some moves could not be verified; partial review remains available.' if result.get('stage')=='failed' else None,row['id']))
-        except Exception:
-            logging.exception('Analysis revision %s failed',row['id'])
+            db.commit()
+            log.info('analysis_revision_completed revision_id=%s subject_type=%s target_ply=%s',
+                     row['id'], row['subject_type'], row['target_ply'])
+        except Exception as exc:
+            # A PostgreSQL statement failure aborts the transaction. Roll it
+            # back before recording the retryable terminal state; otherwise
+            # the worker itself can remain poisoned and leave this revision
+            # stuck in analyzing.
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            log.error('analysis_revision_failed revision_id=%s subject_type=%s subject_id=%s target_ply=%s stage=%s exception_type=%s reason=worker_failure',
+                      row['id'], row['subject_type'], row['subject_id'], row['target_ply'], stage, type(exc).__name__)
             db.execute("UPDATE analysis_revisions SET status='failed',error='Analysis could not be verified. Retry or inspect server logs.',updated_at=CURRENT_TIMESTAMP WHERE id=?",(row['id'],))
-        db.commit()
+            db.commit()
         return True
 
 
