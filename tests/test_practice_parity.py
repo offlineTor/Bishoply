@@ -48,8 +48,8 @@ class PracticeParityTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(rows[1]["owner_discord_id"])
 
         with patch("backend.practice.service.bots.bot_move", new=AsyncMock(return_value={"uci": "e7e5", "selected": {}, "allowed_candidates": []})):
-            moved = await service.player_move(discord_game["game_id"], discord_game["access_key"], "e2e4", 0)
-            replied = await service.bot_response(discord_game["game_id"], discord_game["access_key"], moved["ply"])
+            moved = await service.player_move(web_game["game_id"], web_game["access_key"], "e2e4", 0)
+            replied = await service.bot_response(web_game["game_id"], web_game["access_key"], moved["ply"])
         self.assertEqual(len(replied["moves"]), 2)
         self.assertEqual(replied["moves"][1]["actor"], "bot")
         self.assertEqual(replied["turn"], "white")
@@ -83,6 +83,81 @@ class PracticeParityTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(accounts, "session_user", new=AsyncMock(return_value=self.user["id"])):
             result = await api.active_game(SimpleNamespace(), None)
         self.assertFalse(result["active"])
+
+    async def test_active_game_cleanup_keeps_newest_only(self):
+        from backend.practice import service
+        from backend.practice import storage
+        first = await service.create(None, "scout", "white", user_id=self.user["id"])
+        second = await service.create(None, "tempo", "white", user_id=self.user["id"])
+        connection = await self.db_module.connect()
+        rows = await (await connection.execute("SELECT public_id,status,termination_reason FROM practice_games WHERE owner_user_id=? ORDER BY id", (self.user["id"],))).fetchall()
+        await connection.close()
+        active = [row for row in rows if row["status"] == "active"]
+        self.assertEqual(len(active), 1)
+        self.assertEqual(active[0]["public_id"], second["game_id"])
+        self.assertEqual(rows[0]["termination_reason"], "superseded")
+
+    async def test_recovery_repairs_seven_legacy_active_games_and_allows_move(self):
+        from backend.practice import service
+        from backend.practice import storage
+        from backend.api import practice as api
+        from backend import accounts
+        # Seed an old-style set of active rows directly to model the
+        # production state observed before the integrity policy existed.
+        seed = await service.create(1546225609967935620, "scout", "white")
+        connection = await self.db_module.connect()
+        source = await (await connection.execute(
+            "SELECT * FROM practice_games WHERE public_id=?", (seed["game_id"],))).fetchone()
+        for index in range(6):
+            await connection.execute("""INSERT INTO practice_games
+                (public_id,owner_discord_id,owner_user_id,access_hash,player_color,bot_id,
+                 bot_strength,bot_personality,bot_config,starting_fen,current_fen,ply,revision,status)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                    f"practice_legacy_{index}", 1546225609967935620,
+                    self.user["id"] if index else None, source["access_hash"],
+                    source["player_color"], source["bot_id"], source["bot_strength"],
+                    source["bot_personality"], source["bot_config"], source["starting_fen"],
+                    source["current_fen"], 0, 0, "active"))
+        # Make the recovered seed the newest valid row, as the production
+        # cleanup policy requires deterministic newest-game selection.
+        await connection.execute(
+            "UPDATE practice_games SET created_at='2999-01-01 00:00:00' WHERE public_id=?",
+            (seed["game_id"],))
+        await connection.commit()
+        await connection.close()
+
+        # Startup is repeated on Render restarts; the cleanup and additive
+        # schema path must remain idempotent.
+        await storage.initialize()
+
+        with patch.object(accounts, "session_user", new=AsyncMock(return_value=self.user["id"])):
+            recovered = await api.active_game(SimpleNamespace(), None)
+        self.assertTrue(recovered["active"])
+        self.assertEqual(recovered["game"]["game_id"], seed["game_id"])
+
+        with patch("backend.practice.service.bots.bot_move", new=AsyncMock(
+                return_value={"uci": "e7e5", "selected": {}, "allowed_candidates": []})):
+            moved = await service.player_move(
+                recovered["game_id"], None, "e2e4", None,
+                owner_user_id=self.user["id"])
+            replied = await service.bot_response(
+                recovered["game_id"], None, moved["ply"],
+                owner_user_id=self.user["id"])
+        self.assertEqual(replied["ply"], 2)
+        self.assertEqual(len(replied["moves"]), 2)
+        self.assertEqual(replied["turn"], "white")
+        self.assertEqual(chess.Board(replied["fen"]).turn, chess.WHITE)
+
+        connection = await self.db_module.connect()
+        active_count = await (await connection.execute(
+            "SELECT COUNT(*) FROM practice_games WHERE owner_user_id=? AND status='active'",
+            (self.user["id"],))).fetchone()
+        superseded = await (await connection.execute(
+            "SELECT COUNT(*) FROM practice_games WHERE termination_reason='superseded'",
+        )).fetchone()
+        await connection.close()
+        self.assertEqual(active_count[0], 1)
+        self.assertGreaterEqual(superseded[0], 5)
 
     def test_move_request_normalizes_legacy_uci_field(self):
         from backend.api.practice import MoveRequest

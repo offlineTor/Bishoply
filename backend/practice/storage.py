@@ -3,9 +3,11 @@ import hashlib
 import hmac
 import json
 import chess
+import logging
 from fastapi import HTTPException
 from backend.database import db as database
 from . import config as C
+log = logging.getLogger('uvicorn.error')
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS practice_games (
@@ -88,6 +90,9 @@ async def initialize():
             SET owner_user_id=(SELECT id FROM users WHERE users.discord_id=practice_games.owner_discord_id)
             WHERE owner_user_id IS NULL AND owner_discord_id IS NOT NULL""")
         await db.execute("CREATE INDEX IF NOT EXISTS practice_history_user ON practice_games(owner_user_id,created_at)")
+        users = await (await db.execute("SELECT id,discord_id FROM users")).fetchall()
+        for user in users:
+            await cleanup_active_games(db, user['id'], user['discord_id'])
         await db.execute("UPDATE practice_games SET operation_id=NULL,bot_error='Operation interrupted; retry' WHERE operation_id IS NOT NULL")
         await db.commit()
     except Exception:
@@ -95,6 +100,20 @@ async def initialize():
         raise
     finally:
         await db.close()
+
+
+async def cleanup_active_games(db, user_id, discord_id=None, keep_public_id=None):
+    rows = await (await db.execute("""SELECT id,public_id FROM practice_games
+        WHERE status='active' AND (owner_user_id=? OR (? IS NOT NULL AND owner_discord_id=?))
+        ORDER BY created_at DESC,id DESC""", (user_id, discord_id, discord_id))).fetchall()
+    if keep_public_id:
+        rows = sorted(rows, key=lambda row: row['public_id'] == keep_public_id, reverse=True)
+    if len(rows) <= 1: return rows[0] if rows else None
+    kept = rows[0]
+    for row in rows[1:]:
+        await db.execute("UPDATE practice_games SET status='draw',result=NULL,termination_reason='superseded',completed_at=COALESCE(completed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP,operation_id=NULL WHERE id=? AND status='active'", (row['id'],))
+    log.info('practice_active_cleanup user_id=%s kept_game=%s superseded_count=%s', user_id, kept['public_id'], len(rows)-1)
+    return kept
 
 
 async def require_game(db, public_id, key=None, owner_user_id=None, owner_discord_id=None):

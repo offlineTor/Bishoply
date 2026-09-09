@@ -94,13 +94,13 @@ async def active_game(request: HttpRequest, authorization: str | None = Header(N
     user_id, discord_id = await authenticated_owner(request, authorization)
     connection = await db.connect()
     try:
+        await service.storage.cleanup_active_games(connection, user_id, discord_id)
+        await connection.commit()
         rows = await (await connection.execute("""SELECT public_id FROM practice_games
             WHERE status='active' AND (owner_user_id=? OR (? IS NOT NULL AND owner_discord_id=?))
             ORDER BY created_at DESC, id DESC""", (user_id, discord_id, discord_id))).fetchall()
         if not rows:
             return {'active': False, 'game': None}
-        if len(rows) > 1:
-            log.warning('practice_active_multiple_games user=%s count=%s', user_id, len(rows))
         # The access-key capability is intentionally bypassed only after the
         # canonical authenticated owner has been verified server-side.
         game = await service.get(rows[0]['public_id'], owner_user_id=user_id, owner_discord_id=discord_id)
@@ -123,6 +123,8 @@ async def practice_history(request: HttpRequest, authorization: str | None = Hea
             player_color = row['player_color']
             if status == 'active':
                 user_result = 'in_progress'
+            elif row['termination_reason'] == 'superseded':
+                user_result = 'abandoned'
             elif status == 'draw':
                 user_result = 'draw'
             else:
@@ -170,27 +172,39 @@ async def read_game(game_id: str, request: HttpRequest, x_practice_key: str | No
 
 @router.post('/games/{game_id}/move')
 async def player_move(game_id: str, request: HttpRequest, x_practice_key: str | None = Header(None), authorization: str | None = Header(None)):
+    stage = 'route_entered'
+    log.info('practice_move_route_entered game=%s content_type=%s authorization=%s practice_key=%s',
+             game_id, request.headers.get('content-type', ''), bool(authorization), bool(x_practice_key))
     try:
-        raw = await request.json()
+        try:
+            raw = await request.json()
+        except Exception as exc:
+            raise HTTPException(400, 'Practice move payload must be valid JSON') from exc
+        if not isinstance(raw, dict):
+            raise HTTPException(400, 'Practice move payload must be an object')
+        log.info('practice_move_payload_received game=%s keys=%s types=%s',
+                 game_id, sorted(raw.keys()), {key: type(value).__name__ for key, value in raw.items()})
+        move = raw.get('move') or raw.get('uci')
+        expected = raw.get('expected_ply')
+        if not isinstance(move, str) or not re.fullmatch(r'[a-h][1-8][a-h][1-8][qrbn]?', move):
+            raise HTTPException(422, 'Invalid Practice move payload')
+        if expected is not None:
+            try: expected = int(expected)
+            except (TypeError, ValueError): raise HTTPException(422, 'Invalid Practice ply')
+            if expected < 0: raise HTTPException(422, 'Invalid Practice ply')
+        stage = 'payload_normalized'
+        log.info('practice_move_payload_normalized game=%s move=%s expected_ply=%s source=%s', game_id, move, expected, 'move' if raw.get('move') else 'uci')
+        owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
+        log.info('practice_move_owner_resolved game=%s owner_user_id=%s legacy_discord=%s',
+                 game_id, owner[0] if owner else None, bool(owner and owner[1]))
+        stage = 'owner_resolved'
+        result = await service.player_move(game_id, x_practice_key, move, expected, *(owner or (None, None)))
+        log.info('practice_move_state_loaded game=%s ply=%s', game_id, result.get('ply'))
+        return result
     except Exception as exc:
-        raise HTTPException(400, 'Practice move payload must be valid JSON') from exc
-    log.info('practice_move_route_entered game=%s keys=%s types=%s content_type=%s authorization=%s practice_key=%s',
-             game_id, sorted(raw.keys()) if isinstance(raw, dict) else [],
-             {key: type(value).__name__ for key, value in raw.items()} if isinstance(raw, dict) else type(raw).__name__,
-             request.headers.get('content-type', ''), bool(authorization), bool(x_practice_key))
-    if not isinstance(raw, dict):
-        raise HTTPException(400, 'Practice move payload must be an object')
-    move = raw.get('move') or raw.get('uci')
-    expected = raw.get('expected_ply')
-    if not isinstance(move, str) or not re.fullmatch(r'[a-h][1-8][a-h][1-8][qrbn]?', move):
-        raise HTTPException(422, 'Invalid Practice move payload')
-    if expected is not None:
-        try: expected = int(expected)
-        except (TypeError, ValueError): raise HTTPException(422, 'Invalid Practice ply')
-        if expected < 0: raise HTTPException(422, 'Invalid Practice ply')
-    log.info('practice_move_payload_normalized game=%s move=%s expected_ply=%s source=%s', game_id, move, expected, 'move' if raw.get('move') else 'uci')
-    owner = await authenticated_owner(request, authorization) if not x_practice_key else (None, None)
-    return await service.player_move(game_id,x_practice_key,move,expected,*(owner or (None,None)))
+        log.error('practice_move_failure game=%s stage=%s type=%s reason=%s',
+                  game_id, stage, type(exc).__name__, 'request_failed')
+        raise
 
 
 @router.post('/games/{game_id}/bot-move')

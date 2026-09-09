@@ -32,6 +32,10 @@ async def create(discord_id, bot_id, color, user_id=None):
         user=await (await db.execute('SELECT id FROM users WHERE id=?' if user_id else 'SELECT id FROM users WHERE discord_id=?',(user_id if user_id else discord_id,))).fetchone()
         if user is None:
             raise HTTPException(404,'Bishoply user not found')
+        # Repair legacy duplicate active rows before applying the creation
+        # guard.  This keeps the limit meaningful while ensuring a new game
+        # can always supersede stale active games transactionally.
+        await storage.cleanup_active_games(db, user['id'], int(discord_id) if discord_id is not None else None)
         count=await (await db.execute("SELECT COUNT(*) FROM practice_games WHERE (owner_user_id=? OR owner_discord_id=?) AND status='active'",(user['id'], int(discord_id) if discord_id is not None else None))).fetchone()
         if count[0]>=10:
             raise HTTPException(429,'Finish an existing Practice game before creating another')
@@ -48,6 +52,7 @@ async def create(discord_id, bot_id, color, user_id=None):
             bot_id,bot_strength,bot_personality,bot_config,starting_fen,current_fen,status)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,'active')''',(public_id,int(discord_id) if discord_id is not None else None,user['id'],storage.key_hash(key),color,
             bot_id,bot['estimated_strength'],bot['personality'],json.dumps(bot_config),chess.STARTING_FEN,chess.STARTING_FEN))
+        await storage.cleanup_active_games(db, user['id'], int(discord_id) if discord_id is not None else None, public_id)
         await db.commit()
         game=await storage.require_game(db,public_id,key)
         log.info("practice_create game=%s bot=%s owner_mode=%s", public_id, bot_id, 'discord' if discord_id is not None else 'web')
