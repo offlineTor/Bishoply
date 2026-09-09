@@ -123,6 +123,20 @@ function practiceAuthHeaders(headers = {}) {
 function canAccessPracticeGame() {
   return Boolean(practiceAccessKey || currentProfile);
 }
+
+// Practice owns its interaction gate. Optional panels must never disable a
+// valid board through the global app state.
+function canPlayerMove() {
+  return Boolean(
+    currentProfile &&
+    practiceGame?.game_id &&
+    practiceGame.status === "active" &&
+    practiceGame.turn === practicePlayerColor &&
+    !practiceBusy &&
+    !practiceBotBusy &&
+    !practiceReview.active
+  );
+}
 let practiceReviewPosition = null;
 let practiceReviewFlipped = false;
 let practiceSelectedSquare = null;
@@ -430,6 +444,15 @@ async function apiFetch(path, options = {}) {
 
   if (!response.ok) {
     const kind = response.status === 401 ? "unauthorized" : response.status === 403 ? "forbidden" : response.status === 404 ? "not_found" : response.status === 409 ? "conflict" : response.status === 422 ? "validation_error" : response.status === 429 ? "rate_limited" : response.status >= 500 ? "server_error" : "request_error";
+    if (import.meta.env?.DEV) {
+      console.debug("api_request_failed", {
+        path: normalizedPath,
+        method: options.method || "GET",
+        status: response.status,
+        runtime: isDiscordActivity ? "discord" : "web",
+        error: data?.error || data?.code || kind,
+      });
+    }
     const retryHint = response.headers.get("Retry-After");
     const message = kind === "unauthorized" ? "Your Discord session expired. Reopen the Activity to reconnect." : kind === "forbidden" ? "You do not have access to this resource." : kind === "not_found" ? "That Bishoply resource is no longer available." : kind === "rate_limited" ? `You're doing that too quickly. Try again in a moment.${retryHint ? ` Retry in ${retryHint}s.` : ""}` : kind === "server_error" ? "Bishoply is having trouble right now. Please try again." : formatApiError(data, response.status);
     throw new ApiError(message, kind, response.status, response.headers.get("Retry-After"));
@@ -3120,7 +3143,7 @@ function renderPracticeBoard() {
   const view = renderBoardSurface(practiceBoardElement, practiceGame, {
     selectedSquare: practiceSelectedSquare,
     legalMoves: practiceLegalMoves,
-    canMove: practiceCanMove,
+    canMove: canPlayerMove(),
     playerColor: practicePlayerColor,
     reviewPosition: practiceReviewPosition,
     reviewFlipped: practiceReviewFlipped,
@@ -3199,7 +3222,7 @@ async function undoPracticeGame() {
 }
 
 function setPracticeMoveState() {
-  practiceCanMove = Boolean(practiceGame && practiceGame.status === "active" && practiceGame.turn === practicePlayerColor);
+  practiceCanMove = canPlayerMove();
 }
 
 async function loadPracticeBots() {
@@ -3451,7 +3474,12 @@ async function requestPracticeHint(stage) {
 }
 
 async function submitPracticeMove(uci) {
-  if (!practiceGame?.game_id || !canAccessPracticeGame() || practiceBusy || !practiceCanMove) return;
+  if (!practiceGame?.game_id || !canAccessPracticeGame() || practiceBusy || !canPlayerMove()) return;
+  practiceDebug("practice_ui_move_submit", {
+    game_id: practiceGame.game_id,
+    expected_ply: practiceGame.ply,
+    runtime: isDiscordActivity ? "discord" : "web",
+  });
   practiceBusy = true;
   selectedSquare = null;
   practiceSelectedSquare = null;
@@ -3466,17 +3494,42 @@ async function submitPracticeMove(uci) {
       },
       body: JSON.stringify({ move: uci, expected_ply: practiceGame.ply }),
     });
+    practiceDebug("practice_ui_move_result", {
+      game_id: practiceGame.game_id,
+      status: 200,
+      ply: data?.ply,
+    });
     practiceGame = data;
     await renderPracticeGame(data);
     await requestPracticeAnalysis(data.analysis?.ply || data.ply, true);
     if (data.status === "active" && data.needs_bot_move) {
       await startPracticeBotIfNeeded();
     }
-    await refreshProfile();
-    await loadHistory();
+    try { await refreshProfile(); } catch (error) {
+      practiceDebug("profile refresh skipped", { status: error?.status || 0 });
+    }
+    try { await loadHistory(); } catch (error) {
+      practiceDebug("history refresh skipped", { status: error?.status || 0 });
+    }
+  } catch (error) {
+    practiceDebug("practice_ui_move_failure", {
+      game_id: practiceGame?.game_id || "",
+      status: error?.status || 0,
+      kind: error?.kind || "request_error",
+    });
+    setPracticeStatus(error?.status === 409
+      ? "Practice position changed. Refresh the game and try again."
+      : "Practice move failed. Try again.");
+    if (practiceGame) renderPracticeGame(practiceGame);
   } finally {
     practiceBusy = false;
     practiceBoardElement?.classList.remove("board-thinking");
+    // Recompute after the request/bot pipeline has fully settled. The board
+    // is rendered while practiceBusy is true, so without this refresh a
+    // successful bot reply would leave the player's pieces visually inert.
+    setPracticeMoveState();
+    renderPracticeBoard();
+    renderPracticeInfo();
   }
 }
 
@@ -3500,7 +3553,7 @@ async function handlePracticeSquareClick(square) {
     setPracticeStatus("Practice game is complete.");
     return;
   }
-  if (!practiceCanMove) {
+  if (!canPlayerMove()) {
     setPracticeStatus("Waiting for the bot.");
     return;
   }
@@ -3510,7 +3563,13 @@ async function handlePracticeSquareClick(square) {
     const destinationMoves = practiceLegalMoves.filter(move => move.from === practiceSelectedSquare && move.to === square);
     if (destinationMoves.length) {
       const queen = destinationMoves.find(move => move.promotion === "queen");
-      await submitPracticeMove((queen || destinationMoves[0]).uci);
+      const chosen = queen || destinationMoves[0];
+      practiceDebug("practice_ui_move_attempt", {
+        source: chosen.from,
+        target: chosen.to,
+        uci: chosen.uci,
+      });
+      await submitPracticeMove(chosen.uci);
       return;
     }
     if (piece && piece.color === practicePlayerColor) {
