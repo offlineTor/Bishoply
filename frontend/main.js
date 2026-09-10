@@ -123,6 +123,8 @@ const labBot = $("#lab-bot");
 const labAnalysis = $("#lab-analysis");
 const labSave = $("#lab-save");
 const labSavedList = $("#lab-saved-list");
+const labBoard = $("#lab-board");
+const labPalette = $("#lab-palette");
 let leaderboardKind = "rating";
 let labState = null;
 
@@ -1059,19 +1061,22 @@ function showPage(pageName) {
   }
 }
 
-function setupWebLab({ STARTING_FEN, createLabState, importLabFen, resetLab }) {
+function setupWebLab({ STARTING_FEN, createLabState, importLabFen, resetLab, editFen, boardPieces }) {
   if (!labFen || !labMode) return;
   labState = createLabState();
   labFen.value = labState.fen;
   labMode.value = labState.mode;
+  let selectedPiece = "P";
   const render = () => {
     labFen.value = labState.fen;
     labStatus.textContent = labState.error || `Sandbox mode: ${labState.mode}`;
+    if (labBoard) { const pieces = boardPieces(labState.fen); labBoard.innerHTML = Array.from({length:64}, (_,i) => { const sq=`${String.fromCharCode(97+i%8)}${8-Math.floor(i/8)}`; return `<button type="button" data-lab-square="${sq}">${pieces[sq] || ""}</button>`; }).join(""); labBoard.querySelectorAll("[data-lab-square]").forEach(btn => btn.addEventListener("click", () => { labState = editFen(labState, btn.dataset.labSquare, selectedPiece); render(); })); }
   };
   labImport?.addEventListener("click", () => { labState = importLabFen(labState, labFen.value); render(); });
   labReset?.addEventListener("click", () => { labState = resetLab(labState); render(); });
   labFlip?.addEventListener("click", () => { labState = { ...labState, flipped: !labState.flipped }; render(); });
   labMode.addEventListener("change", () => { labState = { ...labState, mode: labMode.value }; render(); });
+  labPalette?.querySelectorAll("[data-lab-piece]").forEach(button => button.addEventListener("click", () => { selectedPiece = button.dataset.labPiece; labStatus.textContent = selectedPiece ? "Piece selected. Choose a square." : "Remove mode selected."; }));
   labCopy?.addEventListener("click", async () => { try { await navigator.clipboard.writeText(labState.fen); labStatus.textContent = "FEN copied."; } catch { labStatus.textContent = "Copy is unavailable in this browser."; } });
   labAnalyze?.addEventListener("click", async () => { labAnalyze.disabled = true; labStatus.textContent = "Analyzing position…"; try { const result = await apiFetch("/api/lab/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fen: labState.fen }) }); labAnalysis.textContent = JSON.stringify(result, null, 2); labStatus.textContent = "Analysis ready."; } catch (error) { labStatus.textContent = error.message || "Analysis unavailable."; } finally { labAnalyze.disabled = false; } });
   labBot?.addEventListener("click", async () => { labBot.disabled = true; labStatus.textContent = "Bot is thinking…"; try { const result = await apiFetch("/api/lab/bot-move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fen: labState.fen }) }); labState = importLabFen(labState, result.fen_after); render(); } catch (error) { labStatus.textContent = error.message || "Bot unavailable."; } finally { labBot.disabled = false; } });
@@ -5020,6 +5025,16 @@ installStyles();
 bindEvents();
 
 renderEmptyGame();
+
+function activateProductRoot() {
+  const root = document.querySelector(isDiscordActivity ? "#discord-app" : "#web-app");
+  const shell = document.querySelector(".shell");
+  if (!root || !shell) return;
+  root.hidden = false;
+  root.appendChild(shell);
+  document.querySelector(isDiscordActivity ? "#web-app" : "#discord-app")?.replaceChildren();
+}
+activateProductRoot();
 
 // Web owns browser history/navigation. The Discord build never imports this
 // boundary and continues to use the Activity shell below.

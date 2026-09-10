@@ -45,6 +45,8 @@
       <small><a href="#">Terms</a> · <a href="#">Privacy</a></small>
     </div>
   </section>
+  <div id="web-app" hidden></div>
+  <div id="discord-app" hidden></div>
   <main class="shell">
     <aside class="sidebar">
       <div class="brand-block">
@@ -305,6 +307,8 @@
       <section id="page-lab" class="page">
         <div class="page-heading"><div><div class="eyebrow gold">Bishoply strategy sandbox</div><h2>Bishoply Lab</h2><p>Explore positions without rating, Practice history, or competitive records.</p></div></div>
         <div class="lab-panel glass-panel">
+          <div id="lab-board" class="lab-board" aria-label="Lab position editor"></div>
+          <div id="lab-palette" class="lab-palette"><button type="button" data-lab-piece="P">♙</button><button type="button" data-lab-piece="N">♘</button><button type="button" data-lab-piece="B">♗</button><button type="button" data-lab-piece="R">♖</button><button type="button" data-lab-piece="Q">♕</button><button type="button" data-lab-piece="K">♔</button><button type="button" data-lab-piece="p">♟</button><button type="button" data-lab-piece="n">♞</button><button type="button" data-lab-piece="b">♝</button><button type="button" data-lab-piece="r">♜</button><button type="button" data-lab-piece="q">♛</button><button type="button" data-lab-piece="k">♚</button><button type="button" data-lab-piece="">Remove</button></div>
           <div class="lab-toolbar"><label>Mode <select id="lab-mode"><option value="free">Free Board</option><option value="analyze">Analyze Position</option><option value="play">Play From Position</option><option value="bot-white">Bot Controls White</option><option value="bot-black">Bot Controls Black</option></select></label><button id="lab-reset" class="dark-button" type="button">Reset</button><button id="lab-flip" class="dark-button" type="button">Flip</button><button id="lab-analyze" class="gold-button" type="button">Analyze</button><button id="lab-bot" class="dark-button" type="button">Ask Bot</button></div>
           <label class="lab-fen-label">FEN <input id="lab-fen" type="text" spellcheck="false"><button id="lab-import" class="gold-button" type="button">Import</button><button id="lab-copy" class="dark-button" type="button">Copy</button></label>
           <p id="lab-status" class="web-auth-message" role="status"></p>

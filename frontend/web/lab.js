@@ -28,3 +28,9 @@ export function editFen(state, square, piece = "") {
 }
 
 export function clearLabBoard(state) { return editFen({ ...state, fen: `8/8/8/8/8/8/8/8 ${state.fen.split(" ").slice(1).join(" ")}` }, "a1", ""); }
+
+export function boardPieces(fen) {
+  const rows = fen.split(" ")[0].split("/"); const result = {};
+  rows.forEach((row, r) => { let file=0; for (const ch of row) { if (/\d/.test(ch)) file += Number(ch); else { result[`${String.fromCharCode(97+file)}${8-r}`] = ch; file++; } } });
+  return result;
+}
