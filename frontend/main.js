@@ -109,6 +109,8 @@ const accountConnections = $("#account-connections");
 const leaderboardList = $("#leaderboard-list");
 const leaderboardRatingTab = $("#leaderboard-rating-tab");
 const leaderboardSrTab = $("#leaderboard-sr-tab");
+const shopList = $("#shop-list");
+const shopMembership = $("#shop-membership");
 let leaderboardKind = "rating";
 
 
@@ -4119,6 +4121,20 @@ async function loadLeaderboard() {
   } catch (error) { leaderboardList.textContent = "Leaderboard could not be loaded."; }
 }
 
+async function loadShop() {
+  if (!shopList) return;
+  shopList.textContent = "Loading the collection…";
+  try {
+    const data = await apiFetch("/api/shop");
+    const rarityClass = rarity => String(rarity || "Classic").toLowerCase();
+    shopList.innerHTML = (data.items || []).map(item => `<article class="shop-card rarity-${rarityClass(item.rarity)}"><div class="shop-card-top"><span class="eyebrow gold">${escapeHtml(item.category.replaceAll("_", " "))}</span><span class="shop-rarity">${escapeHtml(item.rarity)}</span></div><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(item.metadata_json || "Bishoply cosmetic")}</p><strong>${item.owned ? "Owned" : item.price_cents ? `$${(item.price_cents / 100).toFixed(2)}` : "Included"}</strong></article>`).join("") || `<div class="empty-mini">The collection is being prepared.</div>`;
+    const plans = data.membership?.plans || [];
+    if (shopMembership) shopMembership.innerHTML = `<div><span class="eyebrow gold">Membership</span><h3>Bishoply Crown</h3><p>Advanced reviews, expanded Lab tools, and member cosmetics.</p></div><div class="shop-plans">${plans.map(plan => `<span>${escapeHtml(plan.name)} · $${(plan.price_cents / 100).toFixed(2)} / ${plan.interval}</span>`).join("")}</div>`;
+  } catch (error) {
+    shopList.innerHTML = `<div class="empty-mini"><strong>Shop temporarily unavailable.</strong><span>Try again shortly.</span></div>`;
+  }
+}
+
 
 function requireReady() {
   if (
@@ -4498,6 +4514,9 @@ function bindEvents() {
 
               if (page === "leaderboard") {
                 await loadLeaderboard();
+              }
+              if (page === "shop") {
+                await loadShop();
               }
 
               if (

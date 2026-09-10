@@ -1883,6 +1883,20 @@ code {
 .web-auth-form input:focus { outline:2px solid rgba(220,196,139,.45); outline-offset:1px; }
 .link-button { border:0; background:none; color:#d9bd73; cursor:pointer; font:inherit; font-size:12px; }
 .web-auth-message { min-height:18px; margin:0; color:#e6cf91; font-size:12px; }
+.shop-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:14px; }
+.shop-card { display:grid; gap:10px; min-height:180px; padding:18px; border:1px solid rgba(255,255,255,.1); border-radius:18px; background:linear-gradient(145deg,rgba(255,255,255,.06),rgba(255,255,255,.02)); transition:transform .2s ease,border-color .2s ease; }
+.shop-card:hover { transform:translateY(-3px); border-color:rgba(220,196,139,.45); }
+.shop-card-top { display:flex; justify-content:space-between; gap:8px; align-items:center; }
+.shop-rarity { color:#d9bd73; font-size:10px; letter-spacing:.1em; text-transform:uppercase; }
+.shop-card h3 { margin:0; color:#f2e8ce; }
+.shop-card p { margin:0; color:var(--muted); font-size:12px; line-height:1.5; }
+.shop-card strong { color:#e6cf91; margin-top:auto; }
+.shop-membership { display:flex; justify-content:space-between; gap:16px; align-items:center; margin-bottom:18px; padding:18px 20px; border:1px solid rgba(220,196,139,.28); border-radius:20px; background:linear-gradient(110deg,rgba(220,196,139,.12),rgba(255,255,255,.03)); }
+.shop-membership h3 { margin:4px 0; color:#f2e8ce; }
+.shop-membership p { margin:0; color:var(--muted); font-size:12px; }
+.shop-plans { display:grid; gap:6px; color:#d9bd73; font-size:12px; text-align:right; }
+@media(max-width:900px){.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.shop-membership{align-items:start;flex-direction:column}.shop-plans{text-align:left}}
+@media(max-width:480px){.shop-grid{grid-template-columns:1fr}}
 @keyframes bishoplyBadgeIn { from { opacity:0; transform:translateY(3px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .bishoply-classification-badge { animation:none; } }
 @media(max-width: 900px) {
