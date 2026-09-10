@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { normalizeRoute } from "../web/router.js";
 import { STARTING_FEN, createLabState, importLabFen, resetLab, editFen, clearLabBoard, boardPieces, movePiece, removePiece, normalizeLabAnalysis } from "../web/lab.js";
 import { ApiTransport } from "../shared/api-transport.js";
+import { isDiscordRuntime } from "../shared/runtime.js";
 
 assert.deepEqual(normalizeRoute("/training/abc"), { page: "training", gameId: "abc" });
 assert.equal(normalizeRoute("/shop").page, "shop");
@@ -34,6 +35,8 @@ assert.equal(web.headers({}).Authorization, undefined);
 const discord = new ApiTransport({ proxy: true, token: "test" });
 assert.equal(discord.url("/api/health"), "/api/health");
 assert.equal(discord.credentials(), "omit");
+assert.equal(typeof isDiscordRuntime, "boolean");
+assert.equal(readFileSync(new URL("../main.js", import.meta.url), "utf8").includes("isDiscordRuntime()"), false);
 assert.equal(discord.headers({}).Authorization, "Bearer test");
 assert.throws(() => discord.url("https://bishoply.onrender.com/api/health"));
 assert.deepEqual(normalizeRoute("/"), { page: "home" });

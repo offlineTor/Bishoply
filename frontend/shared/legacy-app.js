@@ -11,7 +11,7 @@ const CLIENT_ID = "1546225609967935620";
 // The Embedded App SDK requires Discord-injected query parameters at
 // construction time. Direct browser visits do not have them, so defer SDK
 // creation until we have positively identified an Activity context.
-let isDiscordActivity = isDiscordRuntime();
+let isDiscordActivity = isDiscordRuntime;
 let discordSdk = null;
 
 const apiTransport = createApiTransport();
@@ -5044,7 +5044,7 @@ function activateProductRoot() {
   inactiveRoot?.setAttribute("hidden", "true");
 }
 
-export async function startLegacyApp({ product = isDiscordRuntime() ? "discord" : "web", lab } = {}) {
+export async function startLegacyApp({ product = isDiscordRuntime ? "discord" : "web", lab } = {}) {
   isDiscordActivity = product === "discord";
   installStyles();
   bindEvents();
