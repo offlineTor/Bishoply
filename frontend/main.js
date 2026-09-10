@@ -183,10 +183,13 @@ emmaVoice.onEvent = event => {
   if (import.meta.env?.DEV) console.debug("[Bishoply Emma Voice]", event);
 };
 
-function renderPracticeView(next = practiceView) {
+function renderPracticeView(next = practiceView, reason = "") {
   const previousView = practiceView;
   const allowed = new Set(["select", "loading", "match"]);
   practiceView = allowed.has(next) ? next : "select";
+  if (import.meta.env?.DEV && previousView !== practiceView) {
+    console.debug("practice_ui_view_change", { from: previousView, to: practiceView, reason });
+  }
   const visible = {
     select: practiceView === "select",
     loading: practiceView === "loading",
@@ -3268,8 +3271,18 @@ async function loadPracticeBots() {
         </article>
       `;
     }).join("");
+    practiceBots.querySelectorAll("[data-practice-bot]").forEach(card => {
+      card.addEventListener("click", event => {
+        if (event.target.closest("button")) return;
+        practiceChoice.bot_id = card.dataset.practiceBot || practiceChoice.bot_id;
+        practiceDebug("practice_bot_selected", { bot_id: practiceChoice.bot_id });
+        practiceBots.querySelectorAll("[data-practice-bot]").forEach(item => item.classList.toggle("selected", item === card));
+        setPracticeStatus(`${getPracticeBot()?.display_name || practiceChoice.bot_id} selected. Choose your color, then Start Practice.`);
+      });
+    });
     practiceBots.querySelectorAll("[data-start-practice]").forEach(button => {
       button.addEventListener("click", async () => {
+        practiceDebug("practice_create_started", { bot_id: button.dataset.startPractice || "" });
         practiceDebug("start handler fired", {
           bot_id: button.dataset.startPractice || "",
           player_color: practiceChoice.player_color,
@@ -3283,7 +3296,8 @@ async function loadPracticeBots() {
             message: error?.message || "",
           });
           practiceCreateBusy = false;
-          renderPracticeView("select");
+          renderPracticeView("select", "create_failed");
+          renderPracticeShell();
           setPracticeStatus(`Practice error: ${error.message}`);
         }
       });
@@ -3327,34 +3341,29 @@ function renderPracticeRecoveryBanner() {
 }
 
 function startNewPracticeFromLobby() {
-  pendingPracticeRecovery = null;
-  practiceGame = null;
-  practiceAccessKey = null;
-  practiceSelectedSquare = null;
-  practiceLegalMoves = [];
-  practiceCanMove = false;
-  practiceBoardPieces = {};
   practiceView = "select";
   renderPracticeShell();
-  setPracticeStatus("Choose a bot to start training.");
+  setPracticeStatus("Choose a bot to start a new training game.");
 }
 
 async function resumeActivePractice() {
   if (!pendingPracticeRecovery || practiceCreateBusy || practiceBotBusy) return;
   const game = pendingPracticeRecovery;
-  pendingPracticeRecovery = null;
   practiceAccessKey = null;
   practiceView = "loading";
-  renderPracticeView("loading");
+  practiceDebug("practice_resume_clicked", { game_id: game.game_id || "" });
+  renderPracticeView("loading", "resume_started");
   const bot = getPracticeBot(game);
   if (practiceLoadingBot) practiceLoadingBot.textContent = bot?.display_name || "Your opponent";
   if (practiceLoadingStrength) practiceLoadingStrength.textContent = bot?.estimated_strength ? `Estimated Bot Strength ${formatNumber(bot.estimated_strength)}` : "";
   if (practiceLoadingCopy) practiceLoadingCopy.textContent = "Restoring your position…";
   try {
     await renderPracticeGame(game);
+    pendingPracticeRecovery = null;
     if (practiceGame?.needs_bot_move) await startPracticeBotIfNeeded();
     setPracticeStatus(`Practice resumed against ${getPracticeBot(practiceGame)?.display_name || "the bot"}.`);
   } catch (error) {
+    pendingPracticeRecovery = game;
     practiceView = "select";
     renderPracticeShell();
     setPracticeStatus("That Practice game could not be resumed. Choose a bot to start a new game.");
@@ -3681,16 +3690,14 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
     return;
   }
   practiceCreateBusy = true;
-  pendingPracticeRecovery = null;
-  practiceGame = null;
-  practiceAccessKey = null;
+  practiceDebug("practice_create_started", { bot_id: botId, player_color: color });
   practiceChoice.bot_id = botId;
   practiceChoice.player_color = color === "black" ? "black" : "white";
   practicePlayerColor = practiceChoice.player_color;
   const launchCopy = { scout:"Scouting the position…", tempo:"Finding the rhythm…", fork:"Looking for tactics…", gambit:"Preparing an attack…", castle:"Fortifying the board…", tactician:"Calculating tactics…", endgame:"Preparing for the long game…", vanguard:"Taking the initiative…", maestro:"Composing the position…", crown:"Your strongest opponent awaits." };
   const selectedBot = getPracticeBot() || practiceBotRoster.find(bot => bot.bot_id === botId) || {};
   setPracticeStatus(`${selectedBot.display_name || botId} · ${launchCopy[botId] || "Preparing the board…"}`);
-  renderPracticeView("loading");
+  renderPracticeView("loading", "create_started");
   if (practiceLoadingBot) practiceLoadingBot.textContent = selectedBot.display_name || botId;
   if (practiceLoadingStrength) practiceLoadingStrength.textContent = `Estimated Bot Strength ${formatNumber(selectedBot.estimated_strength)}`;
   if (practiceLoadingCopy) practiceLoadingCopy.textContent = launchCopy[botId] || "Preparing the board…";
@@ -3714,6 +3721,9 @@ async function createPracticeGame(botId, color = practiceChoice.player_color) {
   practiceDebug("create response", { game_id: game?.game_id || "", status: game?.status || "" });
   practiceCreateBusy = false;
   const { access_key, ...practiceGameData } = game;
+  pendingPracticeRecovery = null;
+  practiceGame = null;
+  practiceAccessKey = null;
   practiceAccessKey = access_key;
   practiceGame = decoratePracticeGame(practiceGameData);
   practiceReview.close();
@@ -4463,6 +4473,13 @@ function bindEvents() {
         );
       }
     );
+
+  // Practice creation is driven by explicit button handlers. Keep the form
+  // non-navigating so a browser cannot turn a click into a full-page reload.
+  practiceCreateForm?.addEventListener("submit", event => {
+    event.preventDefault();
+    practiceDebug("practice_form_submit_prevented");
+  });
 
   if (practiceNewOpponentButton) {
     practiceNewOpponentButton.addEventListener("click", () => {
