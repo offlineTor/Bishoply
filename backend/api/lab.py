@@ -18,6 +18,12 @@ async def save_position(request: Request):
 async def remove_position(position_id: int, request: Request):
     return await lab.delete(await accounts.session_user(request), position_id)
 
+@router.patch("/positions/{position_id}")
+async def rename_position(position_id: int, request: Request):
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("name"): raise HTTPException(422, "A name is required")
+    return await lab.rename(await accounts.session_user(request), position_id, payload["name"])
+
 @router.post("/analyze")
 async def analyze_position(request: Request):
     payload = await request.json()

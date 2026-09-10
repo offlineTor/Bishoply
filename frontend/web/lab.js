@@ -16,3 +16,15 @@ export function validateFen(fen) {
 export function createLabState(fen = STARTING_FEN) { return { mode: "free", fen: validateFen(fen), flipped: false, error: "" }; }
 export function importLabFen(state, fen) { try { return { ...state, fen: validateFen(fen), error: "" }; } catch (error) { return { ...state, error: error.message }; } }
 export function resetLab(state) { return { ...state, fen: STARTING_FEN, error: "" }; }
+
+export function editFen(state, square, piece = "") {
+  const parts = state.fen.split(" "); const ranks = parts[0].split("/");
+  const file = square.charCodeAt(0) - 97, rank = 8 - Number(square[1]);
+  if (file < 0 || file > 7 || rank < 0 || rank > 7 || !/^[a-h][1-8]$/.test(square)) return { ...state, error: "Choose a valid board square." };
+  const expanded = ranks.map(row => [...row].flatMap(ch => /[1-8]/.test(ch) ? Array(Number(ch)).fill("") : [ch]));
+  expanded[rank][file] = piece;
+  const board = expanded.map(row => { let out="", empty=0; for (const ch of row) { if (!ch) empty++; else { if (empty) out += empty; empty=0; out += ch; } } return out + (empty || ""); }).join("/");
+  return { ...state, fen: [board, ...parts.slice(1)].join(" "), error: "" };
+}
+
+export function clearLabBoard(state) { return editFen({ ...state, fen: `8/8/8/8/8/8/8/8 ${state.fen.split(" ").slice(1).join(" ")}` }, "a1", ""); }

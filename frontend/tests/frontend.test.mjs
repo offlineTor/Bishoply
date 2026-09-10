@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { normalizeRoute } from "../web/router.js";
-import { STARTING_FEN, createLabState, importLabFen, resetLab } from "../web/lab.js";
+import { STARTING_FEN, createLabState, importLabFen, resetLab, editFen, clearLabBoard } from "../web/lab.js";
 import { ApiTransport } from "../shared/api-transport.js";
 
 assert.deepEqual(normalizeRoute("/training/abc"), { page: "training", gameId: "abc" });
@@ -10,6 +10,9 @@ assert.equal(initial.fen, STARTING_FEN);
 assert.equal(importLabFen(initial, "bad").error.length > 0, true);
 assert.equal(importLabFen(initial, STARTING_FEN).error, "");
 assert.equal(resetLab({ ...initial, fen: STARTING_FEN.replace(" w ", " b ") }).fen, STARTING_FEN);
+assert.equal(editFen(initial, "e4", "P").fen.split(" ")[0].includes("P"), true);
+assert.equal(editFen(editFen(initial, "e4", "P"), "e4", "").fen.split(" ")[0], initial.fen.split(" ")[0]);
+assert.equal(clearLabBoard(initial).fen.split(" ")[0], "8/8/8/8/8/8/8/8");
 const web = new ApiTransport({ base: "https://bishoply.onrender.com" });
 assert.equal(web.url("/api/profile"), "https://bishoply.onrender.com/api/profile");
 assert.equal(web.credentials(), "include");

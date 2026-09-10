@@ -121,6 +121,8 @@ const labCopy = $("#lab-copy");
 const labAnalyze = $("#lab-analyze");
 const labBot = $("#lab-bot");
 const labAnalysis = $("#lab-analysis");
+const labSave = $("#lab-save");
+const labSavedList = $("#lab-saved-list");
 let leaderboardKind = "rating";
 let labState = null;
 
@@ -1073,6 +1075,9 @@ function setupWebLab({ STARTING_FEN, createLabState, importLabFen, resetLab }) {
   labCopy?.addEventListener("click", async () => { try { await navigator.clipboard.writeText(labState.fen); labStatus.textContent = "FEN copied."; } catch { labStatus.textContent = "Copy is unavailable in this browser."; } });
   labAnalyze?.addEventListener("click", async () => { labAnalyze.disabled = true; labStatus.textContent = "Analyzing position…"; try { const result = await apiFetch("/api/lab/analyze", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fen: labState.fen }) }); labAnalysis.textContent = JSON.stringify(result, null, 2); labStatus.textContent = "Analysis ready."; } catch (error) { labStatus.textContent = error.message || "Analysis unavailable."; } finally { labAnalyze.disabled = false; } });
   labBot?.addEventListener("click", async () => { labBot.disabled = true; labStatus.textContent = "Bot is thinking…"; try { const result = await apiFetch("/api/lab/bot-move", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ fen: labState.fen }) }); labState = importLabFen(labState, result.fen_after); render(); } catch (error) { labStatus.textContent = error.message || "Bot unavailable."; } finally { labBot.disabled = false; } });
+  const loadSaved = async () => { try { const data = await apiFetch("/api/lab/positions"); labSavedList.innerHTML = (data.positions || []).map(pos => `<div class="lab-saved-item"><button type="button" data-lab-load="${pos.id}"><strong>${escapeHtml(pos.name)}</strong><span>${escapeHtml(pos.fen.slice(0, 24))}…</span></button><button type="button" data-lab-rename="${pos.id}">Rename</button><button type="button" data-lab-delete="${pos.id}">Delete</button></div>`).join("") || "No saved positions yet."; labSavedList.querySelectorAll("[data-lab-load]").forEach(button => button.addEventListener("click", async () => { const item = (data.positions || []).find(pos => String(pos.id) === button.dataset.labLoad); if (item) { labState = importLabFen(labState, item.fen); render(); } })); labSavedList.querySelectorAll("[data-lab-delete]").forEach(button => button.addEventListener("click", async () => { await apiFetch(`/api/lab/positions/${button.dataset.labDelete}`, { method: "DELETE" }); await loadSaved(); })); labSavedList.querySelectorAll("[data-lab-rename]").forEach(button => button.addEventListener("click", async () => { const name = window.prompt("Rename position", "Untitled position"); if (name) { await apiFetch(`/api/lab/positions/${button.dataset.labRename}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name }) }); await loadSaved(); } })); } catch { /* guests keep Lab local */ } };
+  labSave?.addEventListener("click", async () => { const name = window.prompt("Name this position", "Untitled position"); if (!name) return; try { await apiFetch("/api/lab/positions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name, fen: labState.fen }) }); labStatus.textContent = "Position saved."; await loadSaved(); } catch (error) { labStatus.textContent = error.message || "Sign in to save positions."; } });
+  loadSaved();
   render();
 }
 

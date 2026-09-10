@@ -30,6 +30,14 @@ async def delete(user_id, position_id):
         return {"deleted": True}
     finally: await db.close()
 
+async def rename(user_id, position_id, name):
+    db = await connect()
+    try:
+        result = await db.execute("UPDATE saved_lab_positions SET name=?,updated_at=CURRENT_TIMESTAMP WHERE id=? AND user_id=?", (str(name or "Untitled position").strip()[:80], position_id, user_id)); await db.commit()
+        if not result.rowcount: raise HTTPException(404, "Lab position not found")
+        return {"updated": True}
+    finally: await db.close()
+
 async def analyze(fen, depth=None):
     board = chess.Board(_valid_fen(fen)); depth = max(8, min(int(depth or 12), 24))
     async def job(engine):

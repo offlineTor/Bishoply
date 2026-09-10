@@ -1901,6 +1901,12 @@ code {
 .lab-toolbar select,.lab-fen-label input { background:#151515; color:#f2e8ce; border:1px solid rgba(255,255,255,.14); border-radius:8px; padding:10px; }
 .lab-fen-label { display:grid; grid-template-columns:auto 1fr auto auto; gap:8px; align-items:center; color:var(--muted); font-size:12px; }
 .lab-analysis { min-height:72px; margin:0; padding:12px; border-radius:10px; background:rgba(0,0,0,.24); color:#d9bd73; white-space:pre-wrap; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+.lab-saved { display:grid; gap:10px; border-top:1px solid rgba(255,255,255,.08); padding-top:14px; }
+.lab-saved-head { display:flex; justify-content:space-between; align-items:center; color:#f2e8ce; }
+.lab-saved-list { display:grid; gap:6px; }
+.lab-saved-item { display:flex; gap:8px; align-items:center; padding:8px; background:rgba(255,255,255,.03); border-radius:8px; }
+.lab-saved-item button:first-child { flex:1; display:grid; gap:3px; text-align:left; background:none; border:0; color:#f2e8ce; cursor:pointer; }
+.lab-saved-item button:not(:first-child) { background:none; border:0; color:#d9bd73; cursor:pointer; font-size:11px; }
 @media(max-width:600px){.lab-fen-label{grid-template-columns:1fr}.lab-fen-label input{width:100%;box-sizing:border-box}}
 @media(max-width:900px){.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.shop-membership{align-items:start;flex-direction:column}.shop-plans{text-align:left}}
 @media(max-width:480px){.shop-grid{grid-template-columns:1fr}}

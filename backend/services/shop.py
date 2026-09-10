@@ -34,7 +34,8 @@ CROWN_PLANS = (
 async def initialize():
     connection = await db.connect()
     try:
-        await connection.execute("BEGIN IMMEDIATE")
+        if getattr(connection, "backend", "sqlite") != "postgres":
+            await connection.execute("BEGIN IMMEDIATE")
         for sku, name, category, rarity, description, price in CATALOG:
             await connection.execute("INSERT OR IGNORE INTO cosmetics(sku,name,category,rarity,metadata_json,active,price_cents) VALUES (?,?,?,?,?,1,?)", (sku,name,category,rarity,description,price))
         await connection.commit()
@@ -104,9 +105,14 @@ async def fulfill_webhook(event):
         existing = await (await connection.execute("SELECT id FROM commerce_transactions WHERE provider_event_id=?", (event_id,))).fetchone()
         if existing: return {"status": "already_processed"}
         await connection.execute("INSERT INTO commerce_transactions(provider,provider_event_id,user_id,product_sku,amount_cents,status) VALUES ('stripe',?,?,?,?,?)", (event_id, int(user_id), sku, product.get("price_cents"), "completed"))
-        if product["kind"] == "cosmetic":
-            row = await (await connection.execute("SELECT id FROM cosmetics WHERE sku=?", (sku,))).fetchone()
-            if row: await connection.execute("INSERT OR IGNORE INTO user_cosmetics(user_id,cosmetic_id,source,transaction_id) VALUES (?,?,?,?)", (int(user_id), row["id"], "purchase", event_id))
+        if product["kind"] in {"cosmetic", "bundle"}:
+            skus = [sku] if product["kind"] == "cosmetic" else list(product.get("items", []))
+            for item_sku in skus:
+                item = _product(item_sku)
+                if item["kind"] != "cosmetic": raise HTTPException(500, "Invalid bundle catalog")
+                row = await (await connection.execute("SELECT id FROM cosmetics WHERE sku=?", (item_sku,))).fetchone()
+                if not row: raise HTTPException(500, "Bundle item is unavailable")
+                await connection.execute("INSERT OR IGNORE INTO user_cosmetics(user_id,cosmetic_id,source,transaction_id) VALUES (?,?,?,?)", (int(user_id), row["id"], "purchase", event_id))
         elif product["kind"] == "subscription":
             status = "active" if event_type in {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated"} else "cancelled"
             await connection.execute("INSERT OR REPLACE INTO subscriptions(user_id,provider,provider_subscription_id,plan_sku,status) VALUES (?,?,?,?,?)", (int(user_id), "stripe", obj.get("subscription") or obj.get("id"), sku, status))

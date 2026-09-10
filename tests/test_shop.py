@@ -44,3 +44,9 @@ class ShopCatalogTests(unittest.IsolatedAsyncioTestCase):
         finally:
             if old is None: os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
             else: os.environ["STRIPE_WEBHOOK_SECRET"] = old
+
+    async def test_bundle_fulfills_all_authoritative_items(self):
+        connection = await db.connect(); await connection.execute("INSERT INTO users(discord_id,username,username_normalized) VALUES(NULL,'bundle','bundle')"); await connection.commit(); await connection.close(); await shop.initialize()
+        event = {"id":"evt_bundle", "type":"checkout.session.completed", "data":{"object":{"metadata":{"user_id":"1","product_sku":"royal-collection"}}}}
+        self.assertEqual((await shop.fulfill_webhook(event))["status"], "fulfilled")
+        connection = await db.connect(); rows = await (await connection.execute("SELECT * FROM user_cosmetics WHERE user_id=1")).fetchall(); await connection.close(); self.assertEqual(len(rows), 3)
