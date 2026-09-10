@@ -34,3 +34,27 @@ export function boardPieces(fen) {
   rows.forEach((row, r) => { let file=0; for (const ch of row) { if (/\d/.test(ch)) file += Number(ch); else { result[`${String.fromCharCode(97+file)}${8-r}`] = ch; file++; } } });
   return result;
 }
+
+export function movePiece(state, source, target) {
+  const pieces = boardPieces(state.fen); const piece = pieces[source];
+  if (!piece || !/^[a-h][1-8]$/.test(target)) return state;
+  return editFen(editFen(state, source, ""), target, piece);
+}
+
+export function removePiece(state, source) {
+  return /^[a-h][1-8]$/.test(source) && boardPieces(state.fen)[source]
+    ? editFen(state, source, "")
+    : state;
+}
+
+export function normalizeLabAnalysis(response = {}) {
+  const candidates = response.candidates || response.result?.candidates || [];
+  return {
+    evaluation: response.evaluation ?? candidates[0]?.evaluation ?? candidates[0]?.cp ?? null,
+    mate: response.mate ?? candidates[0]?.mate ?? null,
+    bestMove: response.best_move ?? response.bestMove ?? candidates[0]?.move ?? null,
+    candidates: candidates.map((item) => item.move || item.uci).filter(Boolean),
+    principalVariation: response.principal_variation || response.pv || candidates[0]?.pv || [],
+    depth: response.depth ?? candidates[0]?.depth ?? null,
+  };
+}

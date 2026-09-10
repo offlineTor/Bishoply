@@ -1,8 +1,14 @@
 import { createWebRouter } from "./router.js";
+import * as lab from "./lab.js";
+import { startLegacyApp } from "../shared/legacy-app.js";
 
-/** Web entry boundary. It deliberately has no Discord SDK/auth imports. */
-export function startWebApp({ onRoute, win = window } = {}) {
-  const router = createWebRouter({ onRoute, win });
+/** Standalone Web product boundary. No Discord SDK/proxy bootstrap. */
+export function startWebApp({ win = window } = {}) {
+  const router = createWebRouter({
+    win,
+    onRoute: ({ page }) => window.dispatchEvent(new CustomEvent("bishoply:web-route", { detail: { page } })),
+  });
+  startLegacyApp({ product: "web", lab });
   router.start();
   return router;
 }

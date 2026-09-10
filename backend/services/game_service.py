@@ -3252,12 +3252,9 @@ async def join_casual_game(
     db = await connect()
 
     try:
-        user = (
-            await get_user_by_discord_id(
-                db,
-                discord_id,
-            )
-        )
+        user = await get_user_by_discord_id(db, discord_id)
+        if user is None:
+            user = await get_user_by_id(db, discord_id)
 
         if user is None:
             return {
@@ -3467,6 +3464,8 @@ async def resign_game(
                 discord_id,
             )
         )
+        if user is None:
+            user = await get_user_by_id(db, discord_id)
 
         if user is None:
             return {
@@ -3544,6 +3543,10 @@ async def resign_game(
                 "resignation",
             )
         )
+        # Resignation completes a rated game just like checkmate; ensure the
+        # canonical rating transaction is applied before returning state.
+        if game["rated_eligible"]:
+            await process_competitive_result(db, game["id"])
 
         return {
             "ok": True,
@@ -3573,6 +3576,8 @@ async def list_user_games(
                 discord_id,
             )
         )
+        if user is None:
+            user = await get_user_by_id(db, discord_id)
 
         if user is None:
             return {
@@ -3916,12 +3921,9 @@ async def make_move(
     db = await connect()
 
     try:
-        user = (
-            await get_user_by_discord_id(
-                db,
-                discord_id,
-            )
-        )
+        user = await get_user_by_discord_id(db, discord_id)
+        if user is None:
+            user = await get_user_by_id(db, discord_id)
 
         if user is None:
             return {
