@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+import os, json, hmac, hashlib, time
 from pathlib import Path
 
 from backend.database import db
@@ -27,3 +28,19 @@ class ShopCatalogTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len({item["sku"] for item in catalog["items"]}), len(catalog["items"]))
         self.assertEqual(len(catalog["bundles"]), 4)
         self.assertEqual(catalog["membership"]["name"], "Bishoply Crown")
+
+    async def test_webhook_signature_and_fulfillment_are_idempotent(self):
+        connection = await db.connect()
+        await connection.execute("INSERT INTO users(discord_id,username,username_normalized,display_name) VALUES (NULL,'buyer','buyer','Buyer')")
+        await connection.commit(); await connection.close()
+        await shop.initialize()
+        payload = json.dumps({"id":"evt_test_1","type":"checkout.session.completed","data":{"object":{"metadata":{"user_id":"1","product_sku":"board-midnight-gold"}}}}).encode()
+        old = os.environ.get("STRIPE_WEBHOOK_SECRET"); os.environ["STRIPE_WEBHOOK_SECRET"] = "test_secret"
+        try:
+            stamp = str(int(time.time())); digest = hmac.new(b"test_secret", (stamp+".").encode()+payload, hashlib.sha256).hexdigest()
+            event = shop.verify_webhook(payload, f"t={stamp},v1={digest}")
+            self.assertEqual((await shop.fulfill_webhook(event))["status"], "fulfilled")
+            self.assertEqual((await shop.fulfill_webhook(event))["status"], "already_processed")
+        finally:
+            if old is None: os.environ.pop("STRIPE_WEBHOOK_SECRET", None)
+            else: os.environ["STRIPE_WEBHOOK_SECRET"] = old

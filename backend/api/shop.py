@@ -17,5 +17,14 @@ async def read_shop(request: Request):
 
 @router.post("/checkout")
 async def checkout(request: Request):
-    await accounts.session_user(request)
-    return await shop.checkout_status()
+    user_id = await accounts.session_user(request)
+    payload = await request.json()
+    if not isinstance(payload, dict) or not payload.get("sku"):
+        raise HTTPException(422, "A product sku is required")
+    sku = payload["sku"]
+    return await shop.create_checkout(user_id, sku, payload.get("success_url", "") or "", payload.get("cancel_url", "") or "")
+
+@router.post("/webhook")
+async def webhook(request: Request):
+    event = shop.verify_webhook(await request.body(), request.headers.get("stripe-signature", ""))
+    return await shop.fulfill_webhook(event)

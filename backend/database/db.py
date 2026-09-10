@@ -398,6 +398,68 @@ CREATE TABLE IF NOT EXISTS user_loadout (
     sound_pack_id INTEGER, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Platform-neutral competitive identities and queue. Discord's legacy queue
+-- remains intact for backwards compatibility while new clients use this table.
+CREATE TABLE IF NOT EXISTS competitive_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL CHECK(platform IN ('web','discord')),
+    platform_user_id TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT,
+    rating REAL NOT NULL DEFAULT 1500.0,
+    sr INTEGER NOT NULL DEFAULT 2500,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, platform_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS competitive_matchmaking_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competitive_player_id INTEGER NOT NULL REFERENCES competitive_players(id) ON DELETE CASCADE,
+    rating_snapshot REAL NOT NULL,
+    platform TEXT NOT NULL,
+    joined_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','matched','cancelled','expired')),
+    matched_game_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(competitive_player_id, status)
+);
+CREATE INDEX IF NOT EXISTS idx_competitive_queue_waiting ON competitive_matchmaking_queue(status, joined_at);
+
+CREATE TABLE IF NOT EXISTS commerce_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    provider_event_id TEXT UNIQUE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_sku TEXT NOT NULL,
+    amount_cents INTEGER,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    provider_subscription_id TEXT UNIQUE,
+    plan_sku TEXT NOT NULL,
+    status TEXT NOT NULL,
+    current_period_end TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS saved_lab_positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    fen TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_saved_lab_user ON saved_lab_positions(user_id, updated_at DESC);
+
 
 CREATE TABLE IF NOT EXISTS competitive_transactions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

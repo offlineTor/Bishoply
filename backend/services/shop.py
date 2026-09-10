@@ -1,5 +1,6 @@
 """Server-authoritative Bishoply cosmetic catalog and Crown configuration."""
-import os
+import hashlib, hmac, json, os, time
+import httpx
 from fastapi import HTTPException
 from backend.database import db
 
@@ -51,3 +52,54 @@ async def checkout_status():
     if not os.getenv("STRIPE_SECRET_KEY"):
         raise HTTPException(503, "Shop checkout is not configured")
     raise HTTPException(503, "Shop checkout is not configured")
+
+def _product(sku):
+    for item in CATALOG:
+        if item[0] == sku: return {"sku": sku, "name": item[1], "price_cents": item[5], "kind": "cosmetic"}
+    for item in BUNDLES:
+        if item["sku"] == sku: return {**item, "kind": "bundle"}
+    for item in CROWN_PLANS:
+        if item["sku"] == sku: return {**item, "kind": "subscription"}
+    raise HTTPException(404, "Shop product not found")
+
+async def create_checkout(user_id, sku, success_url, cancel_url):
+    product = _product(sku)
+    secret = os.getenv("STRIPE_SECRET_KEY")
+    if not secret: raise HTTPException(503, "Shop checkout is not configured")
+    if product.get("price_cents", 0) <= 0: raise HTTPException(400, "This item does not require checkout")
+    data = {"mode": "subscription" if product["kind"] == "subscription" else "payment", "success_url": success_url, "cancel_url": cancel_url, "client_reference_id": str(user_id), "line_items[0][quantity]": "1", "line_items[0][price_data][currency]": "usd", "line_items[0][price_data][unit_amount]": str(product["price_cents"]), "line_items[0][price_data][product_data][name]": product["name"], "metadata[product_sku]": sku, "metadata[user_id]": str(user_id)}
+    async with httpx.AsyncClient(timeout=10) as client:
+        response = await client.post("https://api.stripe.com/v1/checkout/sessions", data=data, auth=(secret, ""))
+    if response.status_code >= 400: raise HTTPException(502, "Payment provider unavailable")
+    return response.json()
+
+def verify_webhook(payload: bytes, signature: str):
+    secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    if not secret or not signature: raise HTTPException(400, "Webhook verification is not configured")
+    timestamp, _, signatures = signature.partition(",")
+    if not timestamp.startswith("t="): raise HTTPException(400, "Invalid webhook signature")
+    expected = hmac.new(secret.encode(), (timestamp[2:] + "." ).encode() + payload, hashlib.sha256).hexdigest()
+    if not any(hmac.compare_digest(expected, value[3:]) for value in signatures.split(",") if value.startswith("v1=")):
+        raise HTTPException(400, "Invalid webhook signature")
+    return json.loads(payload)
+
+async def fulfill_webhook(event):
+    event_id, event_type = event.get("id"), event.get("type")
+    obj = (event.get("data") or {}).get("object") or {}
+    metadata = obj.get("metadata") or {}
+    user_id, sku = metadata.get("user_id"), metadata.get("product_sku")
+    if not event_id or not user_id or not sku: return {"status": "ignored"}
+    product = _product(sku); connection = await db.connect()
+    try:
+        existing = await (await connection.execute("SELECT id FROM commerce_transactions WHERE provider_event_id=?", (event_id,))).fetchone()
+        if existing: return {"status": "already_processed"}
+        await connection.execute("INSERT INTO commerce_transactions(provider,provider_event_id,user_id,product_sku,amount_cents,status) VALUES ('stripe',?,?,?,?,?)", (event_id, int(user_id), sku, product.get("price_cents"), "completed"))
+        if product["kind"] == "cosmetic":
+            row = await (await connection.execute("SELECT id FROM cosmetics WHERE sku=?", (sku,))).fetchone()
+            if row: await connection.execute("INSERT OR IGNORE INTO user_cosmetics(user_id,cosmetic_id,source,transaction_id) VALUES (?,?,?,?)", (int(user_id), row["id"], "purchase", event_id))
+        elif product["kind"] == "subscription":
+            status = "active" if event_type in {"checkout.session.completed", "customer.subscription.created", "customer.subscription.updated"} else "cancelled"
+            await connection.execute("INSERT OR REPLACE INTO subscriptions(user_id,provider,provider_subscription_id,plan_sku,status) VALUES (?,?,?,?,?)", (int(user_id), "stripe", obj.get("subscription") or obj.get("id"), sku, status))
+        await connection.commit(); return {"status": "fulfilled"}
+    except Exception: await connection.rollback(); raise
+    finally: await connection.close()

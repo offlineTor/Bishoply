@@ -66,9 +66,9 @@
           <strong>Play</strong>
         </button>
 
-        <button class="nav-item" data-page="game" type="button">
+        <button class="nav-item" data-page="lab" type="button">
           <span>♙</span>
-          <strong>Position Lab</strong>
+            <strong>Lab</strong>
         </button>
 
         <button class="nav-item" data-page="practice" type="button">
@@ -299,6 +299,16 @@
             </section>
           </aside>
           <section id="game-review" class="game-review" hidden></section>
+        </div>
+      </section>
+
+      <section id="page-lab" class="page">
+        <div class="page-heading"><div><div class="eyebrow gold">Bishoply strategy sandbox</div><h2>Bishoply Lab</h2><p>Explore positions without rating, Practice history, or competitive records.</p></div></div>
+        <div class="lab-panel glass-panel">
+          <div class="lab-toolbar"><label>Mode <select id="lab-mode"><option value="free">Free Board</option><option value="analyze">Analyze Position</option><option value="play">Play From Position</option><option value="bot-white">Bot Controls White</option><option value="bot-black">Bot Controls Black</option></select></label><button id="lab-reset" class="dark-button" type="button">Reset</button><button id="lab-flip" class="dark-button" type="button">Flip</button><button id="lab-analyze" class="gold-button" type="button">Analyze</button><button id="lab-bot" class="dark-button" type="button">Ask Bot</button></div>
+          <label class="lab-fen-label">FEN <input id="lab-fen" type="text" spellcheck="false"><button id="lab-import" class="gold-button" type="button">Import</button><button id="lab-copy" class="dark-button" type="button">Copy</button></label>
+          <p id="lab-status" class="web-auth-message" role="status"></p>
+          <pre id="lab-analysis" class="lab-analysis" aria-live="polite"></pre>
         </div>
       </section>
 

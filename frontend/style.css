@@ -1895,6 +1895,13 @@ code {
 .shop-membership h3 { margin:4px 0; color:#f2e8ce; }
 .shop-membership p { margin:0; color:var(--muted); font-size:12px; }
 .shop-plans { display:grid; gap:6px; color:#d9bd73; font-size:12px; text-align:right; }
+.lab-panel { display:grid; gap:16px; max-width:980px; }
+.lab-toolbar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+.lab-toolbar label { color:var(--muted); font-size:12px; display:flex; gap:8px; align-items:center; }
+.lab-toolbar select,.lab-fen-label input { background:#151515; color:#f2e8ce; border:1px solid rgba(255,255,255,.14); border-radius:8px; padding:10px; }
+.lab-fen-label { display:grid; grid-template-columns:auto 1fr auto auto; gap:8px; align-items:center; color:var(--muted); font-size:12px; }
+.lab-analysis { min-height:72px; margin:0; padding:12px; border-radius:10px; background:rgba(0,0,0,.24); color:#d9bd73; white-space:pre-wrap; font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace; }
+@media(max-width:600px){.lab-fen-label{grid-template-columns:1fr}.lab-fen-label input{width:100%;box-sizing:border-box}}
 @media(max-width:900px){.shop-grid{grid-template-columns:repeat(2,minmax(0,1fr));}.shop-membership{align-items:start;flex-direction:column}.shop-plans{text-align:left}}
 @media(max-width:480px){.shop-grid{grid-template-columns:1fr}}
 @keyframes bishoplyBadgeIn { from { opacity:0; transform:translateY(3px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }

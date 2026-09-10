@@ -22,6 +22,7 @@ from backend.api.matchmaking import router as matchmaking_router
 from backend.services import matchmaking
 from backend.api.leaderboard import router as leaderboard_router
 from backend.api.shop import router as shop_router
+from backend.api.lab import router as lab_router
 from backend.services import shop
 from backend.api.accounts import router as accounts_router
 from backend.database.db import (
@@ -142,6 +143,7 @@ app.include_router(
     profile_router
 )
 app.include_router(shop_router)
+app.include_router(lab_router)
 
 app.include_router(analysis_router)
 app.include_router(practice_router)
