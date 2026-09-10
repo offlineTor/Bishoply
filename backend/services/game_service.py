@@ -183,6 +183,7 @@ def serialize_player(row):
         return None
 
     return {
+        "id": row["id"],
         "discord_id":
             str(
                 row["discord_id"]
@@ -3210,6 +3211,38 @@ async def create_casual_game(
 
     finally:
         await db.close()
+
+async def create_private_game_for_user(user_id):
+    """Create a private waiting game for any canonical Bishoply account."""
+    db = await connect()
+    try:
+        user = await get_user_by_id(db, user_id)
+        if user is None: return {"ok": False, "error": "user_not_found"}
+        await ensure_competitive_profile(db, user_id)
+        public_id = uuid.uuid4().hex[:10].upper()
+        sql = "INSERT INTO games(public_id,white_user_id,black_user_id,mode,rating_pool,status,starting_fen,current_fen,rated_eligible,integrity_status,rating_model) VALUES (?,?,NULL,'private',?,'waiting',?,?,1,'pending',?)"
+        if getattr(db, "backend", "sqlite") == "postgres": sql += " RETURNING id"
+        cursor = await db.execute(sql, (public_id, user_id, DEFAULT_RATING_POOL, STARTING_FEN, STARTING_FEN, CURRENT_RATING_MODEL))
+        game_id = (await cursor.fetchone())["id"] if getattr(db, "backend", "sqlite") == "postgres" else cursor.lastrowid
+        await db.commit(); row = await (await db.execute("SELECT * FROM games WHERE id=?", (game_id,))).fetchone()
+        return {"ok": True, "game": await build_game_payload(db, row), "code": public_id}
+    finally: await db.close()
+
+async def join_private_game_for_user(public_id, user_id):
+    db = await connect()
+    try:
+        await db.execute("BEGIN IMMEDIATE") if getattr(db, "backend", "sqlite") != "postgres" else None
+        select_sql = "SELECT * FROM games WHERE public_id=?" + (" FOR UPDATE" if getattr(db, "backend", "sqlite") == "postgres" else "")
+        game = await (await db.execute(select_sql, (public_id,))).fetchone()
+        if not game: return {"ok": False, "error": "game_not_found"}
+        if game["white_user_id"] == user_id: return {"ok": False, "error": "cannot_join_own_game"}
+        if game["black_user_id"] is not None: return {"ok": False, "error": "game_full"}
+        await db.execute("UPDATE games SET black_user_id=?,status='active',started_at=CURRENT_TIMESTAMP,updated_at=CURRENT_TIMESTAMP WHERE id=? AND black_user_id IS NULL", (user_id, game["id"]))
+        await db.commit(); game = await (await db.execute("SELECT * FROM games WHERE id=?", (game["id"],))).fetchone()
+        return {"ok": True, "game": await build_game_payload(db, game)}
+    except Exception:
+        await db.rollback(); raise
+    finally: await db.close()
 
 
 async def join_casual_game(

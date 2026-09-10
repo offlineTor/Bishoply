@@ -1,5 +1,6 @@
 """Server-authoritative Bishoply cosmetic catalog and Crown configuration."""
 import hashlib, hmac, json, os, time
+from urllib.parse import urlparse
 import httpx
 from fastapi import HTTPException
 from backend.database import db
@@ -67,6 +68,10 @@ async def create_checkout(user_id, sku, success_url, cancel_url):
     secret = os.getenv("STRIPE_SECRET_KEY")
     if not secret: raise HTTPException(503, "Shop checkout is not configured")
     if product.get("price_cents", 0) <= 0: raise HTTPException(400, "This item does not require checkout")
+    origin = os.getenv("BISHOPLY_WEB_ORIGIN", "https://bishoply.onrender.com").rstrip("/")
+    for target in (success_url, cancel_url):
+        if not target or not target.startswith(origin + "/") or urlparse(target).scheme != "https":
+            raise HTTPException(400, "Checkout return URL is not allowed")
     data = {"mode": "subscription" if product["kind"] == "subscription" else "payment", "success_url": success_url, "cancel_url": cancel_url, "client_reference_id": str(user_id), "line_items[0][quantity]": "1", "line_items[0][price_data][currency]": "usd", "line_items[0][price_data][unit_amount]": str(product["price_cents"]), "line_items[0][price_data][product_data][name]": product["name"], "metadata[product_sku]": sku, "metadata[user_id]": str(user_id)}
     async with httpx.AsyncClient(timeout=10) as client:
         response = await client.post("https://api.stripe.com/v1/checkout/sessions", data=data, auth=(secret, ""))
@@ -78,6 +83,11 @@ def verify_webhook(payload: bytes, signature: str):
     if not secret or not signature: raise HTTPException(400, "Webhook verification is not configured")
     timestamp, _, signatures = signature.partition(",")
     if not timestamp.startswith("t="): raise HTTPException(400, "Invalid webhook signature")
+    try:
+        age = abs(time.time() - int(timestamp[2:]))
+        tolerance = int(os.getenv("STRIPE_WEBHOOK_TOLERANCE_SECONDS", "300"))
+    except ValueError as exc: raise HTTPException(400, "Invalid webhook timestamp") from exc
+    if age > tolerance: raise HTTPException(400, "Webhook signature expired")
     expected = hmac.new(secret.encode(), (timestamp[2:] + "." ).encode() + payload, hashlib.sha256).hexdigest()
     if not any(hmac.compare_digest(expected, value[3:]) for value in signatures.split(",") if value.startswith("v1=")):
         raise HTTPException(400, "Invalid webhook signature")

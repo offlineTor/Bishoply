@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { normalizeRoute } from "../web/router.js";
 import { STARTING_FEN, createLabState, importLabFen, resetLab } from "../web/lab.js";
+import { ApiTransport } from "../shared/api-transport.js";
 
 assert.deepEqual(normalizeRoute("/training/abc"), { page: "training", gameId: "abc" });
 assert.equal(normalizeRoute("/shop").page, "shop");
@@ -9,4 +10,15 @@ assert.equal(initial.fen, STARTING_FEN);
 assert.equal(importLabFen(initial, "bad").error.length > 0, true);
 assert.equal(importLabFen(initial, STARTING_FEN).error, "");
 assert.equal(resetLab({ ...initial, fen: STARTING_FEN.replace(" w ", " b ") }).fen, STARTING_FEN);
-console.log("frontend tests: 6 passed");
+const web = new ApiTransport({ base: "https://bishoply.onrender.com" });
+assert.equal(web.url("/api/profile"), "https://bishoply.onrender.com/api/profile");
+assert.equal(web.credentials(), "include");
+assert.equal(web.headers({}).Authorization, undefined);
+const discord = new ApiTransport({ proxy: true, token: "test" });
+assert.equal(discord.url("/api/health"), "/api/health");
+assert.equal(discord.credentials(), "omit");
+assert.equal(discord.headers({}).Authorization, "Bearer test");
+assert.throws(() => discord.url("https://bishoply.onrender.com/api/health"));
+assert.deepEqual(normalizeRoute("/"), { page: "home" });
+assert.equal(normalizeRoute("/training/game-1").gameId, "game-1");
+console.log("frontend tests: 14 passed");

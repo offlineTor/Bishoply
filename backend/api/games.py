@@ -1,6 +1,6 @@
 import chess
 
-from fastapi import APIRouter, HTTPException, Query, Depends
+from fastapi import APIRouter, HTTPException, Query, Depends, Header, Request
 from pydantic import BaseModel
 
 from backend.services.game_service import (
@@ -10,14 +10,49 @@ from backend.services.game_service import (
     list_user_games,
     make_move,
     resign_game,
+    create_private_game_for_user, join_private_game_for_user,
 )
 from backend.practice.auth import discord_identity
+from backend import accounts
+from backend.database.db import connect
 
 
 router = APIRouter(
     prefix="/api/games",
     tags=["games"],
 )
+
+async def _generic_user(request: Request, authorization: str | None = Header(default=None)):
+    if authorization:
+        discord_id = await discord_identity(authorization)
+        db = await connect()
+        try: row = await (await db.execute("SELECT id FROM users WHERE discord_id=?", (discord_id,))).fetchone()
+        finally: await db.close()
+        if not row: raise HTTPException(404, "Bishoply profile not found")
+        return row["id"]
+    return await accounts.session_user(request)
+
+@router.post("/private")
+async def create_private(request: Request, user_id: int = Depends(_generic_user)):
+    result = await create_private_game_for_user(user_id)
+    if not result["ok"]: raise HTTPException(404, "Bishoply profile not found")
+    return {"game_id": result["game"]["game_id"], "code": result["code"], "game": result["game"]}
+
+@router.post("/private/{code}/join")
+async def join_private(code: str, request: Request, user_id: int = Depends(_generic_user)):
+    result = await join_private_game_for_user(code.upper(), user_id)
+    if not result["ok"]:
+        raise HTTPException(409 if result["error"] in {"game_full", "cannot_join_own_game"} else 404, result["error"])
+    return result["game"]
+
+@router.get("/private/{code}")
+async def read_private(code: str, request: Request, user_id: int = Depends(_generic_user)):
+    result = await get_game(code.upper())
+    if not result["ok"]: raise HTTPException(404, "Game not found")
+    game = result["game"]
+    players = {str((game.get("white") or {}).get("id")), str((game.get("black") or {}).get("id"))}
+    if str(user_id) not in players: raise HTTPException(403, "Game access denied")
+    return game
 
 
 def _match_response(game, owner_id):
