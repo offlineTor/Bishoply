@@ -42,6 +42,11 @@ const apiCheck = $("#api-check");
 const profileCheck = $("#profile-check");
 const appSplash = $("#app-splash");
 const webAuthScreen = $("#web-auth-screen");
+const webLoginForm = $("#web-login-form");
+const webSignupForm = $("#web-signup-form");
+const webAuthToggle = $("#web-auth-toggle");
+const webAuthMessage = $("#web-auth-message");
+const webGuestButton = $("#web-guest-button");
 
 const homeRating = $("#home-rating");
 const homeRank = $("#home-rank");
@@ -473,6 +478,21 @@ class ApiError extends Error {
   constructor(message, kind = "request_error", status = 0, retryAfter = null) {
     super(message); this.name = "ApiError"; this.kind = kind; this.status = status; this.retryAfter = retryAfter;
   }
+}
+
+async function completeWebAuthentication() {
+  const session = await apiFetch("/api/auth/session");
+  webSessionAuthenticated = Boolean(session?.authenticated);
+  currentProfile = session?.profile || null;
+  appReady = Boolean(currentProfile && currentProfile.username_selected !== false);
+  if (!appReady) throw new Error("Your profile still needs a username.");
+  setControlsEnabled(true);
+  if (webAuthScreen) webAuthScreen.hidden = true;
+  if (profileCheck) setCheck(profileCheck, "Profile loaded");
+  if (sidebarProfile) sidebarProfile.textContent = currentProfile.username || currentProfile.display_name || "Bishoply player";
+  renderProfile(currentProfile);
+  await Promise.allSettled([loadAccountConnections(), loadProfileCosmetics(), loadPracticeBots()]);
+  setStatus("Bishoply is ready.");
 }
 
 function formatApiError(data, status = 0) {
@@ -4103,10 +4123,10 @@ async function loadLeaderboard() {
 function requireReady() {
   if (
     !appReady ||
-    !currentProfile?.discord_id
+    !currentProfile
   ) {
     setStatus(
-      "Bishoply is still connecting."
+      isDiscordActivity ? "Discord authentication is still loading." : "Sign in to Bishoply to save and play games."
     );
 
     return false;
@@ -4375,6 +4395,55 @@ window.addEventListener("online", () => setStatus("Connection restored."));
 
 
 function bindEvents() {
+  webGuestButton?.addEventListener("click", async () => {
+    if (webAuthScreen) webAuthScreen.hidden = true;
+    setStatus("Browsing as guest. Sign in to save games and progress.");
+    if (practiceBots && !practiceBotRoster.length) {
+      try {
+        const data = await apiFetch("/api/practice/bots");
+        practiceBotRoster = data.bots || [];
+      } catch {}
+    }
+  });
+  webAuthToggle?.addEventListener("click", () => {
+    const signup = webSignupForm && webSignupForm.hidden;
+    if (webLoginForm) webLoginForm.hidden = signup;
+    if (webSignupForm) webSignupForm.hidden = !signup;
+    if (webAuthToggle) webAuthToggle.textContent = signup ? "Already have an account? Log in" : "Create a free Bishoply account";
+    if (webAuthMessage) webAuthMessage.textContent = "";
+  });
+  webLoginForm?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = webLoginForm.querySelector("button[type=submit]");
+    if (button) button.disabled = true;
+    if (webAuthMessage) webAuthMessage.textContent = "Signing in…";
+    try {
+      await apiFetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        identifier: webLoginForm.elements.identifier.value,
+        password: webLoginForm.elements.password.value,
+      }) });
+      await completeWebAuthentication();
+    } catch (error) {
+      if (webAuthMessage) webAuthMessage.textContent = error.message || "Sign-in failed.";
+    } finally { if (button) button.disabled = false; }
+  });
+  webSignupForm?.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = webSignupForm.querySelector("button[type=submit]");
+    if (button) button.disabled = true;
+    if (webAuthMessage) webAuthMessage.textContent = "Creating your Bishoply account…";
+    try {
+      await apiFetch("/api/auth/signup", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+        username: webSignupForm.elements.username.value,
+        email: webSignupForm.elements.email.value,
+        password: webSignupForm.elements.password.value,
+        confirm_password: webSignupForm.elements.confirm_password.value,
+      }) });
+      await completeWebAuthentication();
+    } catch (error) {
+      if (webAuthMessage) webAuthMessage.textContent = error.message || "Account creation failed.";
+    } finally { if (button) button.disabled = false; }
+  });
   if (accountLogoutButton) accountLogoutButton.addEventListener("click", async () => {
     const csrf = document.cookie.split("; ").find((item) => item.startsWith("bishoply_csrf="))?.split("=")[1] || "";
     accountLogoutButton.disabled = true;

@@ -1876,6 +1876,13 @@ code {
 .web-auth-card h2 { margin:0; color:#f3e8c9; }
 .web-auth-card p { margin:0 0 8px; color:#aaa79b; }
 .web-auth-card small,.web-auth-card a { color:#8e8a7f; }
+.web-auth-divider { display:flex; align-items:center; gap:8px; color:#77746b; font-size:10px; text-transform:uppercase; letter-spacing:.12em; }
+.web-auth-divider::before,.web-auth-divider::after { content:""; height:1px; flex:1; background:rgba(255,255,255,.1); }
+.web-auth-form { display:grid; gap:8px; }
+.web-auth-form input { width:100%; box-sizing:border-box; min-height:42px; padding:0 12px; border-radius:10px; border:1px solid rgba(255,255,255,.14); background:#0d0e0d; color:#f2ead4; }
+.web-auth-form input:focus { outline:2px solid rgba(220,196,139,.45); outline-offset:1px; }
+.link-button { border:0; background:none; color:#d9bd73; cursor:pointer; font:inherit; font-size:12px; }
+.web-auth-message { min-height:18px; margin:0; color:#e6cf91; font-size:12px; }
 @keyframes bishoplyBadgeIn { from { opacity:0; transform:translateY(3px) scale(.98); } to { opacity:1; transform:translateY(0) scale(1); } }
 @media (prefers-reduced-motion: reduce) { .bishoply-classification-badge { animation:none; } }
 @media(max-width: 900px) {

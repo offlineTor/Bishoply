@@ -26,6 +26,22 @@
       <button class="gold-button full" data-auth-provider="google" type="button">Continue with Google</button>
       <button class="dark-button full" data-auth-provider="apple" type="button">Continue with Apple</button>
       <button class="dark-button full" data-auth-provider="discord" type="button">Continue with Discord</button>
+      <div class="web-auth-divider"><span>or use a Bishoply account</span></div>
+      <form id="web-login-form" class="web-auth-form">
+        <input id="web-login-identifier" name="identifier" type="text" placeholder="Username or email" autocomplete="username" required>
+        <input id="web-login-password" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+        <button class="gold-button full" type="submit">Log in</button>
+      </form>
+      <form id="web-signup-form" class="web-auth-form" hidden>
+        <input id="web-signup-username" name="username" type="text" placeholder="Choose a username" minlength="3" maxlength="20" required>
+        <input id="web-signup-email" name="email" type="email" placeholder="Email" autocomplete="email" required>
+        <input id="web-signup-password" name="password" type="password" placeholder="Password (10+ characters)" minlength="10" autocomplete="new-password" required>
+        <input id="web-signup-confirm" name="confirm_password" type="password" placeholder="Confirm password" minlength="10" autocomplete="new-password" required>
+        <button class="gold-button full" type="submit">Create account</button>
+      </form>
+      <button id="web-auth-toggle" class="link-button" type="button">Create a free Bishoply account</button>
+      <button id="web-guest-button" class="link-button" type="button">Continue as Guest</button>
+      <p id="web-auth-message" class="web-auth-message" role="status"></p>
       <small><a href="#">Terms</a> · <a href="#">Privacy</a></small>
     </div>
   </section>
@@ -35,7 +51,7 @@
         <div class="brand-mark">♝</div>
         <div>
           <h1>Bishoply</h1>
-          <p>Play differently.</p>
+          <p>Play. Train. Analyze. Improve.</p>
         </div>
       </div>
 
@@ -52,7 +68,7 @@
 
         <button class="nav-item" data-page="game" type="button">
           <span>♙</span>
-          <strong>Current Game</strong>
+          <strong>Position Lab</strong>
         </button>
 
         <button class="nav-item" data-page="practice" type="button">
@@ -108,17 +124,17 @@
         <div class="hero">
           <div class="hero-copy">
             <div class="eyebrow gold">Bishoply Chess Platform</div>
-            <h2>Premium chess, built inside Discord.</h2>
+            <h2>Play. Train. Analyze. Improve.</h2>
             <p>
-              Create games, challenge friends, track progress, and explore upcoming practice, leaderboard, and shop features.
+              A focused chess platform for serious games, deliberate training, and better decisions over the board.
             </p>
 
             <div class="hero-actions">
               <button class="gold-button" data-page-shortcut="play" type="button">
                 Start Duel
               </button>
-              <button class="dark-button" data-page-shortcut="profile" type="button">
-                View Profile
+              <button class="dark-button" data-page-shortcut="practice" type="button">
+                Train Against Bots
               </button>
             </div>
           </div>
@@ -216,10 +232,17 @@
           <article class="glass-panel duel-card">
             <div class="duel-icon">♙</div>
             <h3>Current Match</h3>
-            <p>Once a game is created or joined, jump into the board screen.</p>
+            <p>Open the Position Lab to explore plans and tactics without rating pressure.</p>
             <button class="dark-button full" data-page-shortcut="game" type="button">
-              Open Current Game
+              Open Position Lab
             </button>
+          </article>
+
+          <article class="glass-panel duel-card">
+            <div class="duel-icon">♝</div>
+            <h3>Train Against Bots</h3>
+            <p>Choose a Bishoply training partner and build your game at your pace.</p>
+            <button class="gold-button full" data-page-shortcut="practice" type="button">Open Bot Gallery</button>
           </article>
         </div>
       </section>

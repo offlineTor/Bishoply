@@ -2,11 +2,61 @@ import json
 import os
 import hmac
 from fastapi import APIRouter, Request, Response, Query, HTTPException, Header
+from pydantic import BaseModel
 from backend import accounts
 from backend.services.profile_service import get_profile_by_discord_id
 from backend.database import db
 
 router = APIRouter(prefix="/api/auth", tags=["authentication"])
+
+class WebSignup(BaseModel):
+    username: str
+    email: str
+    password: str
+    confirm_password: str
+
+class WebLogin(BaseModel):
+    identifier: str
+    password: str
+
+class PasswordResetRequest(BaseModel):
+    email: str
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    password: str
+
+async def _set_session(response, user_id):
+    token, csrf = await accounts.create_session(user_id)
+    secure = os.getenv("BISHOPLY_ENV", "development").lower() == "production"
+    response.set_cookie("bishoply_session", token, httponly=True, secure=secure, samesite="lax", max_age=30 * 86400, path="/")
+    response.set_cookie("bishoply_csrf", csrf, httponly=False, secure=secure, samesite="lax", max_age=30 * 86400, path="/")
+
+@router.post("/signup")
+async def web_signup(payload: WebSignup, response: Response):
+    if payload.password != payload.confirm_password:
+        raise HTTPException(422, "Passwords do not match")
+    user_id = await accounts.create_web_account(payload.username, payload.email, payload.password)
+    await _set_session(response, user_id)
+    return {"authenticated": True, "user_id": user_id}
+
+@router.post("/login")
+async def web_login(payload: WebLogin, response: Response):
+    user_id = await accounts.authenticate_web_account(payload.identifier, payload.password)
+    await _set_session(response, user_id)
+    return {"authenticated": True, "user_id": user_id}
+
+@router.post("/forgot-password")
+async def forgot_password(payload: PasswordResetRequest):
+    if not os.getenv("BISHOPLY_EMAIL_PROVIDER"):
+        raise HTTPException(503, "Password recovery is temporarily unavailable")
+    await accounts.issue_password_reset(payload.email)
+    return {"accepted": True, "message": "If that account exists, recovery instructions will be sent."}
+
+@router.post("/reset-password")
+async def reset_password(payload: PasswordResetConfirm):
+    await accounts.reset_web_password(payload.token, payload.password)
+    return {"reset": True}
 
 @router.get("/{provider}/start")
 async def auth_start(provider: str):

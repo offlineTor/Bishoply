@@ -1,5 +1,5 @@
 """Unified Bishoply accounts, provider identities, and web sessions."""
-import base64, hashlib, hmac, json, os, secrets, time
+import base64, hashlib, hmac, json, os, secrets, time, re
 from datetime import datetime, timedelta, timezone
 import httpx
 import logging
@@ -8,6 +8,8 @@ from backend.database import db
 
 PROVIDERS = {"discord", "google", "apple"}
 log = logging.getLogger("uvicorn.error")
+WEB_USERNAME = re.compile(r"^[A-Za-z0-9_]{3,20}$")
+PASSWORD_MIN_LENGTH = 10
 
 def _secret():
     value = os.getenv("SESSION_SECRET")
@@ -16,6 +18,91 @@ def _secret():
     return value.encode()
 
 def _hash(value): return hmac.new(_secret(), value.encode(), hashlib.sha256).hexdigest()
+
+def normalize_email(value):
+    email = str(value or "").strip().lower()
+    if len(email) > 254 or not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
+        raise HTTPException(422, "Enter a valid email address")
+    return email
+
+def password_hash(password):
+    if not isinstance(password, str) or len(password) < PASSWORD_MIN_LENGTH:
+        raise HTTPException(422, f"Password must be at least {PASSWORD_MIN_LENGTH} characters")
+    salt = secrets.token_bytes(16)
+    digest = hashlib.scrypt(password.encode(), salt=salt, n=2**14, r=8, p=1)
+    return "scrypt$16384$8$1$" + base64.urlsafe_b64encode(salt).decode() + "$" + base64.urlsafe_b64encode(digest).decode()
+
+def verify_password(password, encoded):
+    try:
+        scheme, n, r, p, salt, digest = encoded.split("$", 5)
+        if scheme != "scrypt": return False
+        actual = hashlib.scrypt(password.encode(), salt=base64.urlsafe_b64decode(salt), n=int(n), r=int(r), p=int(p))
+        return hmac.compare_digest(actual, base64.urlsafe_b64decode(digest))
+    except Exception:
+        return False
+
+async def create_web_account(username, email, password):
+    username = str(username or "").strip()
+    if not WEB_USERNAME.fullmatch(username):
+        raise HTTPException(422, "Username must be 3–20 letters, numbers, or underscores")
+    email = normalize_email(email)
+    encoded = password_hash(password)
+    connection = await db.connect()
+    try:
+        await connection.execute("BEGIN IMMEDIATE")
+        duplicate = await (await connection.execute("SELECT id FROM users WHERE username_normalized=? OR email=?", (username.lower(), email))).fetchone()
+        if duplicate: raise HTTPException(409, "Username or email is already in use")
+        stamp = datetime.now(timezone.utc).replace(tzinfo=None).isoformat(sep=" ")
+        row = await (await connection.execute("INSERT INTO users(discord_id,username,username_normalized,username_selected_at,display_name,email,password_hash) VALUES (NULL,?,?,?,?,?,?) RETURNING id", (username, username.lower(), stamp, username, email, encoded))).fetchone()
+        if not row: raise RuntimeError("Web account creation did not return an id")
+        user_id = row["id"]
+        await connection.execute("INSERT INTO username_history(user_id,old_username,new_username) VALUES (?,?,?)", (user_id, None, username))
+        await connection.commit()
+        return user_id
+    except Exception:
+        await connection.rollback(); raise
+    finally: await connection.close()
+
+async def authenticate_web_account(identifier, password):
+    value = str(identifier or "").strip().lower()
+    connection = await db.connect()
+    try:
+        row = await (await connection.execute("SELECT id,password_hash FROM users WHERE email=? OR username_normalized=?", (value, value))).fetchone()
+    finally: await connection.close()
+    if not row or not row["password_hash"] or not verify_password(password, row["password_hash"]):
+        raise HTTPException(401, "Invalid username/email or password")
+    return row["id"]
+
+async def issue_password_reset(email):
+    email = normalize_email(email)
+    connection = await db.connect()
+    try:
+        row = await (await connection.execute("SELECT id FROM users WHERE email=? AND password_hash IS NOT NULL", (email,))).fetchone()
+        if not row: return False
+        token = secrets.token_urlsafe(32)
+        expires = (datetime.now(timezone.utc) + timedelta(minutes=30)).replace(tzinfo=None).isoformat(sep=" ")
+        await connection.execute("INSERT INTO password_reset_tokens(user_id,token_hash,expires_at) VALUES (?,?,?)", (row["id"], _hash(token), expires))
+        await connection.commit()
+        # Delivery is intentionally delegated to the configured mail adapter;
+        # never return reset tokens through the public API.
+        return True
+    except Exception:
+        await connection.rollback(); raise
+    finally: await connection.close()
+
+async def reset_web_password(token, password):
+    encoded = password_hash(password)
+    connection = await db.connect()
+    try:
+        await connection.execute("BEGIN IMMEDIATE")
+        row = await (await connection.execute("SELECT id,user_id FROM password_reset_tokens WHERE token_hash=? AND used_at IS NULL AND expires_at>CURRENT_TIMESTAMP", (_hash(str(token or "")),))).fetchone()
+        if not row: raise HTTPException(400, "Reset link is invalid or expired")
+        await connection.execute("UPDATE users SET password_hash=? WHERE id=?", (encoded, row["user_id"]))
+        await connection.execute("UPDATE password_reset_tokens SET used_at=CURRENT_TIMESTAMP WHERE id=?", (row["id"],))
+        await connection.commit()
+    except Exception:
+        await connection.rollback(); raise
+    finally: await connection.close()
 
 def _state(provider, redirect_uri, user_id=None):
     payload = {"provider": provider, "redirect_uri": redirect_uri, "nonce": secrets.token_urlsafe(18), "exp": int(time.time()) + 600}
