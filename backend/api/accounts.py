@@ -26,6 +26,10 @@ class PasswordResetConfirm(BaseModel):
     token: str
     password: str
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
 async def _set_session(response, user_id):
     token, csrf = await accounts.create_session(user_id)
     secure = os.getenv("BISHOPLY_ENV", "development").lower() == "production"
@@ -57,6 +61,16 @@ async def forgot_password(payload: PasswordResetRequest):
 async def reset_password(payload: PasswordResetConfirm):
     await accounts.reset_web_password(payload.token, payload.password)
     return {"reset": True}
+
+@router.post("/password/change")
+async def change_password(payload: PasswordChange, request: Request):
+    user_id = await accounts.session_user(request)
+    csrf_cookie = request.cookies.get("bishoply_csrf")
+    csrf_header = request.headers.get("X-CSRF-Token")
+    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+        raise HTTPException(403, "CSRF validation failed")
+    await accounts.change_web_password(user_id, payload.current_password, payload.new_password)
+    return {"changed": True}
 
 @router.get("/{provider}/start")
 async def auth_start(provider: str):

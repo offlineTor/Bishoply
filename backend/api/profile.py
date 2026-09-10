@@ -24,11 +24,11 @@ async def _one(sql, params=()):
     finally: await connection.close()
 
 async def profile_for(user_id):
-    row = await _one("SELECT id,discord_id,username,display_name,avatar_url,created_at,username_selected_at,username_change_count FROM users WHERE id=?", (user_id,))
+    row = await _one("SELECT id,discord_id,username,email,display_name,avatar_url,created_at,username_selected_at,username_change_count FROM users WHERE id=?", (user_id,))
     if not row: raise HTTPException(404, "Bishoply profile not found")
     rating = await _one("SELECT rating,peak_rating,rating_deviation,provisional,wins,losses,draws,games_played,rated_games FROM ratings WHERE user_id=?", (user_id,))
     progression = await _one("SELECT sr,peak_sr,games_rewarded FROM progression WHERE user_id=?", (user_id,))
-    return {"user_id": row["id"], "discord_id": row["discord_id"], "username": row["username"], "username_selected": bool(row["username_selected_at"]), "display_name": row["display_name"], "avatar_url": row["avatar_url"], "account_created_at": row["created_at"], "rating": round(float(rating["rating"])) if rating else 1200, "peak_rating": round(float(rating["peak_rating"])) if rating else 1200, "sr": int(progression["sr"]) if progression else 2500, "peak_sr": int(progression["peak_sr"]) if progression else 2500, "wins": int(rating["wins"]) if rating else 0, "losses": int(rating["losses"]) if rating else 0, "draws": int(rating["draws"]) if rating else 0, "games_played": int(rating["games_played"]) if rating else 0}
+    return {"user_id": row["id"], "discord_id": row["discord_id"], "username": row["username"], "email": row["email"], "username_selected": bool(row["username_selected_at"]), "display_name": row["display_name"], "avatar_url": row["avatar_url"], "account_created_at": row["created_at"], "rating": round(float(rating["rating"])) if rating else 1200, "peak_rating": round(float(rating["peak_rating"])) if rating else 1200, "sr": int(progression["sr"]) if progression else 2500, "peak_sr": int(progression["peak_sr"]) if progression else 2500, "wins": int(rating["wins"]) if rating else 0, "losses": int(rating["losses"]) if rating else 0, "draws": int(rating["draws"]) if rating else 0, "games_played": int(rating["games_played"]) if rating else 0}
 
 @router.get("")
 async def read_current_profile(request: Request, authorization: str | None = Header(None)):

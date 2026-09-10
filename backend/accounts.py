@@ -104,6 +104,17 @@ async def reset_web_password(token, password):
         await connection.rollback(); raise
     finally: await connection.close()
 
+async def change_web_password(user_id, current_password, new_password):
+    encoded = password_hash(new_password)
+    connection = await db.connect()
+    try:
+        row = await (await connection.execute("SELECT password_hash FROM users WHERE id=?", (user_id,))).fetchone()
+        if not row or not row["password_hash"] or not verify_password(current_password, row["password_hash"]):
+            raise HTTPException(401, "Current password is incorrect")
+        await connection.execute("UPDATE users SET password_hash=?,updated_at=CURRENT_TIMESTAMP WHERE id=?", (encoded, user_id))
+        await connection.commit()
+    finally: await connection.close()
+
 def _state(provider, redirect_uri, user_id=None):
     payload = {"provider": provider, "redirect_uri": redirect_uri, "nonce": secrets.token_urlsafe(18), "exp": int(time.time()) + 600}
     if user_id is not None: payload["link_user_id"] = int(user_id)
