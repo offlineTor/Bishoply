@@ -360,6 +360,15 @@ CREATE TABLE IF NOT EXISTS username_history (
     transaction_id TEXT
 );
 
+CREATE TABLE IF NOT EXISTS password_reset_tokens (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token_hash TEXT NOT NULL UNIQUE,
+    expires_at TIMESTAMP NOT NULL,
+    used_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS cosmetics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sku TEXT NOT NULL UNIQUE,
@@ -388,6 +397,68 @@ CREATE TABLE IF NOT EXISTS user_loadout (
     capture_sound_id INTEGER, check_sound_id INTEGER, victory_sound_id INTEGER,
     sound_pack_id INTEGER, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Platform-neutral competitive identities and queue. Discord's legacy queue
+-- remains intact for backwards compatibility while new clients use this table.
+CREATE TABLE IF NOT EXISTS competitive_players (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    platform TEXT NOT NULL CHECK(platform IN ('web','discord')),
+    platform_user_id TEXT NOT NULL,
+    user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+    display_name TEXT,
+    rating REAL NOT NULL DEFAULT 1500.0,
+    sr INTEGER NOT NULL DEFAULT 2500,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(platform, platform_user_id)
+);
+
+CREATE TABLE IF NOT EXISTS competitive_matchmaking_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    competitive_player_id INTEGER NOT NULL REFERENCES competitive_players(id) ON DELETE CASCADE,
+    rating_snapshot REAL NOT NULL,
+    platform TEXT NOT NULL,
+    joined_at REAL NOT NULL,
+    updated_at REAL NOT NULL,
+    status TEXT NOT NULL DEFAULT 'queued' CHECK(status IN ('queued','matched','cancelled','expired')),
+    matched_game_id TEXT,
+    revision INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(competitive_player_id, status)
+);
+CREATE INDEX IF NOT EXISTS idx_competitive_queue_waiting ON competitive_matchmaking_queue(status, joined_at);
+
+CREATE TABLE IF NOT EXISTS commerce_transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider TEXT NOT NULL,
+    provider_event_id TEXT UNIQUE,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    product_sku TEXT NOT NULL,
+    amount_cents INTEGER,
+    currency TEXT NOT NULL DEFAULT 'usd',
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider TEXT NOT NULL,
+    provider_subscription_id TEXT UNIQUE,
+    plan_sku TEXT NOT NULL,
+    status TEXT NOT NULL,
+    current_period_end TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS saved_lab_positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    fen TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_saved_lab_user ON saved_lab_positions(user_id, updated_at DESC);
 
 
 CREATE TABLE IF NOT EXISTS competitive_transactions (
@@ -850,6 +921,10 @@ async def initialize_database():
             await db.execute("ALTER TABLE users ADD COLUMN username_selected_at TIMESTAMP")
         if "username_change_count" not in user_columns:
             await db.execute("ALTER TABLE users ADD COLUMN username_change_count INTEGER NOT NULL DEFAULT 0")
+        if "email" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN email TEXT")
+        if "password_hash" not in user_columns:
+            await db.execute("ALTER TABLE users ADD COLUMN password_hash TEXT")
         await db.execute("UPDATE users SET username_normalized=LOWER(username) WHERE username_normalized IS NULL")
         await db.execute("UPDATE users SET username_selected_at=CURRENT_TIMESTAMP WHERE username_selected_at IS NULL")
         duplicates = await (await db.execute("SELECT username_normalized FROM users WHERE username_normalized IS NOT NULL GROUP BY username_normalized HAVING COUNT(*)>1")).fetchall()
@@ -858,6 +933,7 @@ async def initialize_database():
             for row in rows[1:]:
                 await db.execute("UPDATE users SET username_normalized=SUBSTR(username_normalized,1,15)||'_'||CAST(id AS TEXT) WHERE id=?", (row["id"],))
         await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_username_normalized ON users(username_normalized)")
+        await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_normalized ON users(email) WHERE email IS NOT NULL")
         # Backfill the canonical Discord provider identity for every existing
         # Bishoply user. This is additive and idempotent.
         await db.execute("INSERT OR IGNORE INTO auth_identities(user_id,provider,subject) SELECT id,'discord',CAST(discord_id AS TEXT) FROM users WHERE discord_id IS NOT NULL")

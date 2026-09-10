@@ -21,6 +21,9 @@ from backend.api.voice import router as voice_router
 from backend.api.matchmaking import router as matchmaking_router
 from backend.services import matchmaking
 from backend.api.leaderboard import router as leaderboard_router
+from backend.api.shop import router as shop_router
+from backend.api.lab import router as lab_router
+from backend.services import shop
 from backend.api.accounts import router as accounts_router
 from backend.database.db import (
     connect,
@@ -139,6 +142,8 @@ async def unhandled_error_handler(request: Request, exc: Exception):
 app.include_router(
     profile_router
 )
+app.include_router(shop_router)
+app.include_router(lab_router)
 
 app.include_router(analysis_router)
 app.include_router(practice_router)
@@ -168,6 +173,8 @@ async def startup():
     startup_log.info("Bishoply practice init start")
     await initialize_practice()
     startup_log.info("Bishoply practice init complete")
+    await shop.initialize()
+    startup_log.info("Bishoply shop catalog init complete")
     startup_log.info("Bishoply analysis init start")
     await initialize_analysis()
     startup_log.info("Bishoply analysis init complete")

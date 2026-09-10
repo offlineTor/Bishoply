@@ -26,16 +26,34 @@
       <button class="gold-button full" data-auth-provider="google" type="button">Continue with Google</button>
       <button class="dark-button full" data-auth-provider="apple" type="button">Continue with Apple</button>
       <button class="dark-button full" data-auth-provider="discord" type="button">Continue with Discord</button>
+      <div class="web-auth-divider"><span>or use a Bishoply account</span></div>
+      <form id="web-login-form" class="web-auth-form">
+        <input id="web-login-identifier" name="identifier" type="text" placeholder="Username or email" autocomplete="username" required>
+        <input id="web-login-password" name="password" type="password" placeholder="Password" autocomplete="current-password" required>
+        <button class="gold-button full" type="submit">Log in</button>
+      </form>
+      <form id="web-signup-form" class="web-auth-form" hidden>
+        <input id="web-signup-username" name="username" type="text" placeholder="Choose a username" minlength="3" maxlength="20" required>
+        <input id="web-signup-email" name="email" type="email" placeholder="Email" autocomplete="email" required>
+        <input id="web-signup-password" name="password" type="password" placeholder="Password (10+ characters)" minlength="10" autocomplete="new-password" required>
+        <input id="web-signup-confirm" name="confirm_password" type="password" placeholder="Confirm password" minlength="10" autocomplete="new-password" required>
+        <button class="gold-button full" type="submit">Create account</button>
+      </form>
+      <button id="web-auth-toggle" class="link-button" type="button">Create a free Bishoply account</button>
+      <button id="web-guest-button" class="link-button" type="button">Continue as Guest</button>
+      <p id="web-auth-message" class="web-auth-message" role="status"></p>
       <small><a href="#">Terms</a> · <a href="#">Privacy</a></small>
     </div>
   </section>
+  <div id="web-app" hidden></div>
+  <div id="discord-app" hidden></div>
   <main class="shell">
     <aside class="sidebar">
       <div class="brand-block">
         <div class="brand-mark">♝</div>
         <div>
           <h1>Bishoply</h1>
-          <p>Play differently.</p>
+          <p>Play. Train. Analyze. Improve.</p>
         </div>
       </div>
 
@@ -50,9 +68,9 @@
           <strong>Play</strong>
         </button>
 
-        <button class="nav-item" data-page="game" type="button">
+        <button class="nav-item" data-page="lab" type="button">
           <span>♙</span>
-          <strong>Current Game</strong>
+            <strong>Lab</strong>
         </button>
 
         <button class="nav-item" data-page="practice" type="button">
@@ -108,17 +126,17 @@
         <div class="hero">
           <div class="hero-copy">
             <div class="eyebrow gold">Bishoply Chess Platform</div>
-            <h2>Premium chess, built inside Discord.</h2>
+            <h2>Play. Train. Analyze. Improve.</h2>
             <p>
-              Create games, challenge friends, track progress, and explore upcoming practice, leaderboard, and shop features.
+              A focused chess platform for serious games, deliberate training, and better decisions over the board.
             </p>
 
             <div class="hero-actions">
               <button class="gold-button" data-page-shortcut="play" type="button">
                 Start Duel
               </button>
-              <button class="dark-button" data-page-shortcut="profile" type="button">
-                View Profile
+              <button class="dark-button" data-page-shortcut="practice" type="button">
+                Train Against Bots
               </button>
             </div>
           </div>
@@ -216,10 +234,17 @@
           <article class="glass-panel duel-card">
             <div class="duel-icon">♙</div>
             <h3>Current Match</h3>
-            <p>Once a game is created or joined, jump into the board screen.</p>
+            <p>Open the Position Lab to explore plans and tactics without rating pressure.</p>
             <button class="dark-button full" data-page-shortcut="game" type="button">
-              Open Current Game
+              Open Position Lab
             </button>
+          </article>
+
+          <article class="glass-panel duel-card">
+            <div class="duel-icon">♝</div>
+            <h3>Train Against Bots</h3>
+            <p>Choose a Bishoply training partner and build your game at your pace.</p>
+            <button class="gold-button full" data-page-shortcut="practice" type="button">Open Bot Gallery</button>
           </article>
         </div>
       </section>
@@ -276,6 +301,20 @@
             </section>
           </aside>
           <section id="game-review" class="game-review" hidden></section>
+        </div>
+      </section>
+
+      <section id="page-lab" class="page">
+        <div class="page-heading"><div><div class="eyebrow gold">Bishoply strategy sandbox</div><h2>Bishoply Lab</h2><p>Explore positions without rating, Practice history, or competitive records.</p></div></div>
+        <div class="lab-panel glass-panel">
+          <div id="lab-board" class="lab-board" aria-label="Lab position editor"></div>
+          <button id="lab-trash" class="lab-trash" type="button" aria-label="Remove dragged piece">🗑 Remove Piece</button>
+          <div id="lab-palette" class="lab-palette"><button type="button" data-lab-piece="P">♙</button><button type="button" data-lab-piece="N">♘</button><button type="button" data-lab-piece="B">♗</button><button type="button" data-lab-piece="R">♖</button><button type="button" data-lab-piece="Q">♕</button><button type="button" data-lab-piece="K">♔</button><button type="button" data-lab-piece="p">♟</button><button type="button" data-lab-piece="n">♞</button><button type="button" data-lab-piece="b">♝</button><button type="button" data-lab-piece="r">♜</button><button type="button" data-lab-piece="q">♛</button><button type="button" data-lab-piece="k">♚</button><button type="button" data-lab-piece="">Remove</button></div>
+          <div class="lab-toolbar"><label>Mode <select id="lab-mode"><option value="free">Free Board</option><option value="analyze">Analyze Position</option><option value="play">Play From Position</option><option value="bot-white">Bot Controls White</option><option value="bot-black">Bot Controls Black</option></select></label><button id="lab-reset" class="dark-button" type="button">Reset</button><button id="lab-flip" class="dark-button" type="button">Flip</button><button id="lab-analyze" class="gold-button" type="button">Analyze</button><button id="lab-bot" class="dark-button" type="button">Ask Bot</button></div>
+          <label class="lab-fen-label">FEN <input id="lab-fen" type="text" spellcheck="false"><button id="lab-import" class="gold-button" type="button">Import</button><button id="lab-copy" class="dark-button" type="button">Copy</button></label>
+          <p id="lab-status" class="web-auth-message" role="status"></p>
+          <pre id="lab-analysis" class="lab-analysis" aria-live="polite"></pre>
+          <div class="lab-saved"><div class="lab-saved-head"><strong>Saved positions</strong><button id="lab-save" class="gold-button" type="button">Save Position</button></div><div id="lab-saved-list" class="empty-mini">Sign in to save Lab positions.</div></div>
         </div>
       </section>
 
@@ -451,11 +490,9 @@
       </section>
 
       <section id="page-shop" class="page">
-        <div class="locked-page">
-          <div class="eyebrow gold">Shop</div>
-          <h2>Cosmetics shop coming later.</h2>
-          <p>Boards, pieces, frames, badges, themes, and effects will go here.</p>
-        </div>
+        <div class="page-heading"><div><div class="eyebrow gold">Bishoply collection</div><h2>Shop</h2><p>Original cosmetics for your board, profile, and soundscape. Nothing here changes gameplay.</p></div></div>
+        <div id="shop-membership" class="shop-membership"></div>
+        <div id="shop-list" class="shop-grid"><div class="empty-mini">Loading the collection…</div></div>
       </section>
 
     </section>

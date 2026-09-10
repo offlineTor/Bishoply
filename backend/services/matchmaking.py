@@ -9,6 +9,7 @@ from fastapi import HTTPException
 
 from backend.database.db import connect, DEFAULT_RATING_POOL, ensure_competitive_profile
 from backend.services.game_service import STARTING_FEN, CURRENT_RATING_MODEL, build_game_payload
+from backend.services import competitive
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS matchmaking_queue (
@@ -27,6 +28,17 @@ CREATE INDEX IF NOT EXISTS matchmaking_rating ON matchmaking_queue(queue_type,st
 CREATE UNIQUE INDEX IF NOT EXISTS matchmaking_one_queued ON matchmaking_queue(discord_user_id,queue_type) WHERE status='queued';
 """
 STALE_SECONDS = 120
+
+# Generic platform-neutral queue used by Web and Activity clients. The legacy
+# Discord queue below remains available for existing clients during migration.
+async def join_generic(player_id):
+    return await competitive.join(player_id)
+
+async def status_generic(player_id):
+    return await competitive.status(player_id)
+
+async def cancel_generic(player_id):
+    return await competitive.cancel(player_id)
 
 
 async def initialize():

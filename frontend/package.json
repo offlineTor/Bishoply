@@ -5,8 +5,9 @@
   "scripts": {
     "dev": "vite --host 0.0.0.0 --port 5173",
     "build": "vite build",
-    "build:web": "vite build --mode production",
-    "build:discord": "vite build --mode discord"
+    "build:web": "VITE_RUNTIME=web VITE_API_BASE_URL=https://bishoply.onrender.com vite build --mode production",
+    "build:discord": "VITE_RUNTIME=discord VITE_API_PROXY_BASE=/api vite build --mode discord",
+    "test:frontend": "node tests/frontend.test.mjs"
   },
   "dependencies": {
     "@discord/embedded-app-sdk": "latest"
